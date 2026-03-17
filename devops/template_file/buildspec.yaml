@@ -1,0 +1,45 @@
+version: 0.2
+
+# ── buildspec.yaml — Lambda Build Phase ──────────────────────────────────────
+#
+# Used by the "BackendBuild" CodeBuild project (Stage 2: Build).
+# Packages the Lambda function source into a ZIP file ready for deployment.
+#
+# What this does:
+#   1. Moves into the backend-deployment/ folder
+#   2. Installs production dependencies (if any)
+#   3. ZIPs the entire folder into lambda-deployment.zip
+#   4. Exports the ZIP as the pipeline artifact
+#
+# The Deploy stage (Stage 3) picks up this ZIP and runs:
+#   aws lambda update-function-code --zip-file fileb://lambda-deployment.zip
+# ─────────────────────────────────────────────────────────────────────────────
+
+phases:
+
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - echo "Installing Lambda dependencies..."
+      # Chain cd with && because CodeBuild resets to source root between phases.
+      # --production skips devDependencies (keeps the ZIP small).
+      - cd backend-deployment && npm install --production
+
+  build:
+    commands:
+      - echo "Packaging Lambda function into ZIP..."
+      # zip -r: recursively ZIP everything in backend-deployment/
+      # The resulting file lands at the source root level.
+      - cd backend-deployment && zip -r ../lambda-deployment.zip .
+      - echo "ZIP created:"
+      - ls -lh lambda-deployment.zip
+
+# ── Artifacts ────────────────────────────────────────────────────────────────
+# Export ONLY the ZIP file (not the whole repo) to the next pipeline stage.
+# The Deploy stage's buildspec (deploy_buildspec.yaml) will receive this ZIP
+# and push it to the Lambda function.
+artifacts:
+  files:
+    - lambda-deployment.zip
+  discard-paths: yes   # Keep the ZIP at the artifact root (no subfolder nesting)

@@ -1,0 +1,276 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Node.js Backend CI/CD Pipeline — Lambda Deployment.
+  Defines ALL related resources in one stack:
+  IAM roles, CodeBuild projects, GitHub connection reference, and the pipeline.
+  Mirrors the frontend pipeline structure with Lambda-specific stages.
+
+# ── Parameters ────────────────────────────────────────────────
+# These are passed in by setup.sh from .env values.
+Parameters:
+
+  GitHubOrgRepo:
+    Type: String
+    Description: GitHub repository in ORG/REPO format (e.g. myorg/learning-backend-repository)
+
+  GitHubBranch:
+    Type: String
+    Default: main
+    Description: Branch to watch and trigger the pipeline on
+
+  LambdaFunctionName:
+    Type: String
+    Description: >
+      Name of the Lambda function to deploy to.
+      Must match the function created by backend_template.yaml.
+
+  GitHubConnectionArn:
+    Type: String
+    Description: >-
+      ARN of a manually created and AVAILABLE CodeStar GitHub connection.
+      Create this in AWS Console: CodePipeline > Settings > Connections > Create connection > GitHub
+
+# ── Resources ─────────────────────────────────────────────────
+Resources:
+
+  # ── Artifacts Bucket ──────────────────────────────────────────
+  # S3 bucket used by CodePipeline to pass artifacts between stages.
+  # Also stores the Lambda deployment ZIP between the Build and Deploy stages.
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - Status: Enabled
+            ExpirationInDays: 30  # Auto-clean old artifacts after 30 days
+
+  # ── IAM Role: CodePipeline ────────────────────────────────────
+  # Allows CodePipeline to read/write S3, trigger CodeBuild, and use
+  # the GitHub connection.
+  BackendCodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: BackendCodePipelineRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BackendCodePipelinePermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # S3 — read/write pipeline artifacts (including the Lambda ZIP)
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetBucketVersioning
+                  - s3:ListBucket
+                  - s3:GetObjectVersion
+                  - s3:DeleteObject
+                Resource: '*'
+              # CodeBuild — start builds and check status
+              - Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                  - codebuild:BatchGetProjects
+                Resource: '*'
+              # GitHub connection — pull source code
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource: '*'
+
+  # ── IAM Role: CodeBuild ───────────────────────────────────────
+  # Allows CodeBuild to write CloudWatch logs, access S3 artifacts,
+  # and update the Lambda function code (deploy step).
+  BackendCodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: BackendCodeBuildRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BackendCodeBuildPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # CloudWatch Logs — stream build output
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+              # S3 — read source artifact, write Lambda ZIP artifact
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetObjectVersion
+                  - s3:ListBucket
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Resource: '*'
+              # Lambda — update function code in the Deploy stage
+              - Effect: Allow
+                Action:
+                  - lambda:UpdateFunctionCode
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:PublishVersion
+                Resource: '*'
+              # CodeBuild Reports — optional test reporting
+              - Effect: Allow
+                Action:
+                  - codebuild:CreateReportGroup
+                  - codebuild:CreateReport
+                  - codebuild:UpdateReport
+                  - codebuild:BatchPutTestCases
+                Resource: '*'
+
+  # ── GitHub Connection ─────────────────────────────────────────
+  # NOTE: The connection is NOT created by CloudFormation here.
+  # Connections created via CloudFormation have OAuth issues.
+  # Instead, create it manually in the AWS Console:
+  #   CodePipeline > Settings > Connections > Create connection > GitHub
+  # Then paste the ARN into .env as GITHUB_CONNECTION_ARN.
+
+  # ── CodeBuild: Lambda Build Project ───────────────────────────
+  # Stage 2: Runs npm install + zips the backend-deployment/ folder.
+  # Equivalent to ReactBuildProject in the frontend pipeline.
+  # Uses devops/template_file/buildspec.yaml.
+  BackendBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: backend-lambda-build-project
+      ServiceRole: !GetAtt BackendCodeBuildRole.Arn
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: devops/template_file/buildspec.yaml
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_SMALL
+        ImagePullCredentialsType: CODEBUILD
+
+  # ── CodeBuild: Lambda Deploy Project ──────────────────────────
+  # Stage 3: Calls aws lambda update-function-code to push the new ZIP.
+  # Equivalent to CloudFrontInvalidationProject in the frontend pipeline.
+  # Uses devops/code_pipeline/deploy_buildspec.yaml.
+  LambdaDeployProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: backend-lambda-deploy-project
+      ServiceRole: !GetAtt BackendCodeBuildRole.Arn
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: devops/code_pipeline/deploy_buildspec.yaml
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_SMALL
+        ImagePullCredentialsType: CODEBUILD
+        EnvironmentVariables:
+          # The deploy script reads this variable to know which function to update
+          - Name: LAMBDA_FUNCTION_NAME
+            Value: !Ref LambdaFunctionName
+            Type: PLAINTEXT
+
+  # ── CodePipeline ──────────────────────────────────────────────
+  BackendPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt BackendCodePipelineRole.Arn
+
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactsBucket
+
+      Stages:
+
+        # ── Stage 1: Source ───────────────────────────────────────
+        # Pull code from GitHub whenever a push is made to the branch.
+        # Equivalent to the frontend's Source stage.
+        - Name: Source
+          Actions:
+            - Name: GitHubSource
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: 1
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                ConnectionArn: !Ref GitHubConnectionArn
+                FullRepositoryId: !Ref GitHubOrgRepo
+                BranchName: !Ref GitHubBranch
+
+        # ── Stage 2: Build ────────────────────────────────────────
+        # npm install + zip backend-deployment/ → lambda-deployment.zip
+        # Equivalent to the frontend's Build stage (React build).
+        - Name: Build
+          Actions:
+            - Name: LambdaBuild
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput   # Contains lambda-deployment.zip
+              Configuration:
+                ProjectName: !Ref BackendBuildProject
+
+        # ── Stage 3: Deploy ───────────────────────────────────────
+        # Push the ZIP to Lambda via aws lambda update-function-code.
+        # Equivalent to the frontend's Deploy stage (S3 upload + CF invalidation).
+        - Name: Deploy
+          Actions:
+
+            # Action 1: Push ZIP → Lambda (RunOrder 1)
+            # Reads lambda-deployment.zip from BuildOutput and calls
+            # aws lambda update-function-code with it.
+            - Name: LambdaDeploy
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              InputArtifacts:
+                - Name: BuildOutput   # ZIP from Build stage
+              Configuration:
+                ProjectName: !Ref LambdaDeployProject
+              RunOrder: 1
+
+# ── Outputs ───────────────────────────────────────────────────
+Outputs:
+
+  PipelineName:
+    Description: Name of the created CodePipeline
+    Value: !Ref BackendPipeline
+
+  ArtifactsBucketName:
+    Description: S3 bucket used for pipeline artifacts (also stores Lambda ZIPs)
+    Value: !Ref ArtifactsBucket

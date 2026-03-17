@@ -1,0 +1,25 @@
+version: 0.2
+
+# ── deploy_buildspec.yaml — Lambda Deploy Phase ───────────────────────────────
+#
+# Used by the "LambdaDeploy" CodeBuild project (Stage 3: Deploy).
+# This is the equivalent of invalidate_buildspec.yaml in the frontend pipeline.
+#
+# It runs AFTER the Build stage has produced lambda-deployment.zip.
+# CodePipeline passes the BuildOutput artifact (the ZIP) to this project.
+#
+# What this does:
+#   1. Calls aws lambda update-function-code with the ZIP file
+#   2. Waits for the update to propagate (publishes a new version)
+#
+# Required environment variable in the CodeBuild project:
+#   LAMBDA_FUNCTION_NAME = <your Lambda function name>
+# ─────────────────────────────────────────────────────────────────────────────
+
+phases:
+
+  build:
+    commands:
+      - echo "Deploying Lambda function - $LAMBDA_FUNCTION_NAME"
+      - chmod +x devops/code_pipeline/deploy.sh
+      - devops/code_pipeline/deploy.sh
