@@ -29,12 +29,11 @@ phases:
   build:
     commands:
       - echo "Packaging Lambda function into ZIP..."
-      # IMPORTANT: cd must be chained with && because each CodeBuild command
-      # resets to the source root. We cd INTO backend-deployment so that
-      # ../lambda-deployment.zip resolves to the source root (one level up).
-      - cd backend-deployment && zip -r ../lambda-deployment.zip .
+      # Step 1: cd into backend-deployment, zip everything into lambda-deployment.zip
+      #         (created inside backend-deployment/ to avoid writing to ../)
+      # Step 2: mv the zip up to the source root where the artifact section expects it
+      - cd backend-deployment && zip -r lambda-deployment.zip . && mv lambda-deployment.zip ../
       - echo "ZIP created:"
-      # ls runs from source root (default after the previous command resets)
       - ls -lh lambda-deployment.zip
 
 # ── Artifacts ────────────────────────────────────────────────────────────────
