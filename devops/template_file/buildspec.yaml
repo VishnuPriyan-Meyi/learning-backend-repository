@@ -28,11 +28,17 @@ phases:
 
   build:
     commands:
-      - echo "Packaging Lambda function into ZIP..."
-      # Step 1: cd into backend-deployment, zip everything into lambda-deployment.zip
-      #         (created inside backend-deployment/ to avoid writing to ../)
-      # Step 2: mv the zip up to the source root where the artifact section expects it
-      - cd backend-deployment && zip -r lambda-deployment.zip . && mv lambda-deployment.zip ../
+      - echo "=== Source root contents ==="
+      - ls -la
+      - echo "=== Packaging Lambda function into ZIP ==="
+      - |
+        if [ -d "backend-deployment" ]; then
+          echo "Found backend-deployment/ — zipping its contents..."
+          cd backend-deployment && zip -r lambda-deployment.zip . && mv lambda-deployment.zip ../
+        else
+          echo "No backend-deployment/ dir — zipping index.js + package.json from source root..."
+          zip -r lambda-deployment.zip index.js package.json
+        fi
       - echo "ZIP created:"
       - ls -lh lambda-deployment.zip
 
