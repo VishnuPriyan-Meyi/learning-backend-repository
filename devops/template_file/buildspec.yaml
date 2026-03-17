@@ -2,12 +2,14 @@ version: 0.2
 
 # ── buildspec.yaml — Lambda Build Phase ──────────────────────────────────────
 #
-# The Lambda source files (index.js, package.json) live at the REPO ROOT.
+# Lambda source lives in backend-deployment/ (inside the repo).
 # devops/ holds only pipeline config and is NOT included in the Lambda ZIP.
 #
-# Stages:
-#   install → npm install (from repo root)
-#   build   → zip only the Lambda files → lambda-deployment.zip
+# IMPORTANT — CodeBuild persistent shell behaviour:
+#   All commands in a phase run in ONE persistent shell.
+#   A bare `cd backend-deployment` leaks the working directory to every
+#   subsequent command (and even to the next phase).
+#   Fix: wrap every `cd` in a subshell (...) so the change never leaks.
 # ─────────────────────────────────────────────────────────────────────────────
 
 phases:
@@ -17,17 +19,22 @@ phases:
       nodejs: 20
     commands:
       - echo "Installing Lambda dependencies..."
-      - npm install --production
+      # ✅ Subshell — cd is isolated, CWD stays at source root after this command.
+      - (cd backend-deployment && npm install --production)
 
   build:
     commands:
       - echo "Packaging Lambda function into ZIP..."
-      # Zip only the Lambda source files — exclude devops/ and other pipeline artifacts.
-      - zip -r lambda-deployment.zip index.js package.json package-lock.json node_modules/ 2>/dev/null || zip -r lambda-deployment.zip index.js package.json
+      # ✅ Subshell — cd + zip together, output goes straight to CODEBUILD_SRC_DIR
+      #    (absolute path) so the artifact collector always finds it regardless
+      #    of what the shell's current working directory is.
+      - (cd backend-deployment && zip -r "$CODEBUILD_SRC_DIR/lambda-deployment.zip" .)
       - echo "ZIP created:"
-      - ls -lh lambda-deployment.zip
+      - ls -lh "$CODEBUILD_SRC_DIR/lambda-deployment.zip"
 
 # ── Artifacts ────────────────────────────────────────────────────────────────
+# CODEBUILD_SRC_DIR is the default artifact base directory.
+# lambda-deployment.zip is written there directly above.
 artifacts:
   files:
     - lambda-deployment.zip
