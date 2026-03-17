@@ -31,7 +31,7 @@ phases:
       - echo "Packaging Lambda function into ZIP..."
       # zip -r: recursively ZIP everything in backend-deployment/
       # The resulting file lands at the source root level.
-      - cd backend-deployment && zip -r ../lambda-deployment.zip .
+      - zip -r ../lambda-deployment.zip .
       - echo "ZIP created:"
       - ls -lh lambda-deployment.zip
 
