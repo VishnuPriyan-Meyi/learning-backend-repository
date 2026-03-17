@@ -40,7 +40,7 @@ echo "Updating Lambda function code..."
 aws lambda update-function-code \
   --function-name "$LAMBDA_FUNCTION_NAME" \
   --zip-file fileb://lambda-deployment.zip \
-  / --output json/
+  --output json
 
 # ── Wait for the update to complete ──────────────────────────
 # Lambda updates are asynchronous. Wait until the function state is Active

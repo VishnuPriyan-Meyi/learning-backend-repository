@@ -136,6 +136,13 @@ echo "[ Step 4 ] Deploying infrastructure stack: $INFRA_STACK_NAME"
 info "This creates the Lambda function, IAM execution role, and API Gateway HTTP API..."
 info "Note: Lambda needs an initial empty placeholder ZIP in S3 to create successfully."
 
+# Ensure 'zip' is available — install it if missing (WSL/Ubuntu minimal)
+if ! command -v zip &>/dev/null; then
+  info "'zip' not found — installing..."
+  sudo apt-get install -y zip -q
+  ok "zip installed."
+fi
+
 # Create a minimal placeholder ZIP so CloudFormation can create the Lambda function.
 # The first pipeline run will immediately replace this with the real code.
 echo 'exports.handler = async () => ({ statusCode: 200, body: "pending first deploy" });' > /tmp/index.js

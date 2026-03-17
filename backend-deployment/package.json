@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Learning Backend — AWS Lambda Function",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"No tests configured yet\" && exit 0"
   },
