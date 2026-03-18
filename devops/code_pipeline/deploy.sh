@@ -5,9 +5,11 @@
 # Called by the LambdaDeploy CodeBuild project (via deploy_buildspec.yaml).
 # This is the Lambda equivalent of the frontend's CloudFront invalidation step.
 #
-# The Build stage has already produced lambda-deployment.zip and placed it
-# in the CodePipeline artifacts bucket. CodePipeline passes it to this project
-# as the BuildOutput input artifact (extracted into the working directory).
+# Input artifacts received by the Deploy CodeBuild action:
+#   SourceOutput  (PRIMARY)   — full repo source, contains this script
+#   BuildOutput   (SECONDARY) — contains lambda-deployment.zip
+#
+# CodeBuild mounts the secondary artifact at: $CODEBUILD_SRC_DIR_BuildOutput
 
 set -e  # Exit immediately on any error
 
@@ -23,23 +25,26 @@ fi
 
 echo "Function name: $LAMBDA_FUNCTION_NAME"
 
-# ── Confirm the ZIP exists in the working directory ───────────
-if [ ! -f "lambda-deployment.zip" ]; then
-  echo "ERROR: lambda-deployment.zip not found in working directory."
-  echo "Files present:"
-  ls -la
+# ── Locate the ZIP from the secondary BuildOutput artifact ────
+# When CodeBuild receives multiple input artifacts, the secondary ones
+# are extracted to $CODEBUILD_SRC_DIR_<ArtifactName>.
+ZIP_PATH="${CODEBUILD_SRC_DIR_BuildOutput}/lambda-deployment.zip"
+
+if [ ! -f "$ZIP_PATH" ]; then
+  echo "ERROR: lambda-deployment.zip not found at: $ZIP_PATH"
+  echo "Files in BuildOutput dir:"
+  ls -la "${CODEBUILD_SRC_DIR_BuildOutput}/" 2>/dev/null || echo "(directory not found)"
   exit 1
 fi
 
-echo "ZIP size: $(du -sh lambda-deployment.zip | cut -f1)"
+echo "ZIP path: $ZIP_PATH"
+echo "ZIP size: $(du -sh "$ZIP_PATH" | cut -f1)"
 
 # ── Update Lambda function code ───────────────────────────────
-# --zip-file fileb:// uploads the ZIP directly from the local filesystem.
-# CodePipeline has already extracted the artifact ZIP into this directory.
 echo "Updating Lambda function code..."
 aws lambda update-function-code \
   --function-name "$LAMBDA_FUNCTION_NAME" \
-  --zip-file fileb://lambda-deployment.zip \
+  --zip-file "fileb://$ZIP_PATH" \
   --output json
 
 # ── Wait for the update to complete ──────────────────────────

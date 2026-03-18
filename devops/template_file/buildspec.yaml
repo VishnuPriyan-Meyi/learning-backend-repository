@@ -27,7 +27,7 @@ phases:
       - echo "Packaging Lambda function into ZIP..."
       # ✅ Subshell — cd + zip together, output goes straight to CODEBUILD_SRC_DIR
       #    (absolute path) so the artifact collector always finds it regardless
-      #    of what the shell's current working directory is.
+      #    of what the shell's current working directory is.deploy_buildspec.yaml
       - (cd backend-deployment && zip -r "$CODEBUILD_SRC_DIR/lambda-deployment.zip" .)
       - echo "ZIP created:"
       - ls -lh "$CODEBUILD_SRC_DIR/lambda-deployment.zip"

@@ -249,9 +249,15 @@ Resources:
         - Name: Deploy
           Actions:
 
-            # Action 1: Push ZIP → Lambda (RunOrder 1)
-            # Reads lambda-deployment.zip from BuildOutput and calls
-            # aws lambda update-function-code with it.
+            # Action: Push ZIP → Lambda
+            #
+            # Two input artifacts are required:
+            #   SourceOutput (PRIMARY) — full repo source, contains
+            #     devops/code_pipeline/deploy_buildspec.yaml and deploy.sh
+            #   BuildOutput  (SECONDARY) — contains lambda-deployment.zip
+            #
+            # PrimarySource tells CodeBuild which artifact holds the buildspec.
+            # The secondary artifact is available at $CODEBUILD_SRC_DIR_BuildOutput.
             - Name: LambdaDeploy
               ActionTypeId:
                 Category: Build
@@ -259,9 +265,11 @@ Resources:
                 Provider: CodeBuild
                 Version: 1
               InputArtifacts:
-                - Name: BuildOutput   # ZIP from Build stage
+                - Name: SourceOutput   # PRIMARY — has deploy_buildspec.yaml + deploy.sh
+                - Name: BuildOutput    # SECONDARY — has lambda-deployment.zip
               Configuration:
                 ProjectName: !Ref LambdaDeployProject
+                PrimarySource: SourceOutput
               RunOrder: 1
 
 # ── Outputs ───────────────────────────────────────────────────
