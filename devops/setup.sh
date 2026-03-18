@@ -102,7 +102,7 @@ info "This creates IAM roles, CodeBuild projects, the Artifacts bucket, and the 
 info "(The pipeline will be PENDING until after Step 4 deploys the Lambda function.)"
 
 aws cloudformation deploy \
-  --template-file devops/code_pipeline/pipeline.yaml \
+  --template-file devops/templates/pipeline.yaml \
   --stack-name "$PIPELINE_STACK_NAME" \
   --capabilities CAPABILITY_NAMED_IAM \
   --parameter-overrides \
@@ -154,7 +154,7 @@ aws s3 cp /tmp/lambda-deployment.zip \
 ok "Placeholder ZIP uploaded to s3://${ARTIFACTS_BUCKET}/lambda-deployment.zip"
 
 aws cloudformation deploy \
-  --template-file devops/template_file/backend_template.yaml \
+  --template-file devops/templates/backend_template.yaml \
   --stack-name "$INFRA_STACK_NAME" \
   --capabilities CAPABILITY_NAMED_IAM \
   --parameter-overrides \

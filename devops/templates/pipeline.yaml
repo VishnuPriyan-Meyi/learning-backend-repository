@@ -161,7 +161,7 @@ Resources:
       ServiceRole: !GetAtt BackendCodeBuildRole.Arn
       Source:
         Type: CODEPIPELINE
-        BuildSpec: devops/template_file/buildspec.yaml
+        BuildSpec: devops/buildspecs/buildspec.yaml
       Artifacts:
         Type: CODEPIPELINE
       Environment:
@@ -183,26 +183,7 @@ Resources:
       ServiceRole: !GetAtt BackendCodeBuildRole.Arn
       Source:
         Type: CODEPIPELINE
-        # Inline buildspec — avoids any dependency on files in the source repo.
-        BuildSpec: |
-          version: 0.2
-          phases:
-            build:
-              commands:
-                - echo "────────────────────────────────────────────"
-                - echo " Lambda Deployment"
-                - echo "────────────────────────────────────────────"
-                - echo "Function - $LAMBDA_FUNCTION_NAME"
-                - ZIP_PATH="$CODEBUILD_SRC_DIR/lambda-deployment.zip"
-                - echo "ZIP path - $ZIP_PATH"
-                - ls -lh "$ZIP_PATH"
-                - |
-                  aws lambda update-function-code \
-                    --function-name "$LAMBDA_FUNCTION_NAME" \
-                    --zip-file "fileb://$ZIP_PATH" \
-                    --output json
-                - aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
-                - echo "✔ Lambda deployment complete!"
+        BuildSpec: devops/buildspecs/deploy_buildspec.yaml
       Artifacts:
         Type: CODEPIPELINE
       Environment:
@@ -280,9 +261,11 @@ Resources:
                 Provider: CodeBuild
                 Version: 1
               InputArtifacts:
-                - Name: BuildOutput   # Contains lambda-deployment.zip
+                - Name: SourceOutput   # Primary: contains deploy.sh
+                - Name: BuildOutput    # Secondary: contains the ZIP
               Configuration:
                 ProjectName: !Ref LambdaDeployProject
+                PrimarySource: SourceOutput
               RunOrder: 1
 
 # ── Outputs ───────────────────────────────────────────────────
