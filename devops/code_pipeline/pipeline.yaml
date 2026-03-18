@@ -173,7 +173,9 @@ Resources:
   # ── CodeBuild: Lambda Deploy Project ──────────────────────────
   # Stage 3: Calls aws lambda update-function-code to push the new ZIP.
   # Equivalent to CloudFrontInvalidationProject in the frontend pipeline.
-  # Uses devops/code_pipeline/deploy_buildspec.yaml.
+  #
+  # Buildspec is INLINE (no external file dependency).
+  # Input artifact BuildOutput contains lambda-deployment.zip at $CODEBUILD_SRC_DIR.
   LambdaDeployProject:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -181,7 +183,26 @@ Resources:
       ServiceRole: !GetAtt BackendCodeBuildRole.Arn
       Source:
         Type: CODEPIPELINE
-        BuildSpec: devops/code_pipeline/deploy_buildspec.yaml
+        # Inline buildspec — avoids any dependency on files in the source repo.
+        BuildSpec: |
+          version: 0.2
+          phases:
+            build:
+              commands:
+                - echo "────────────────────────────────────────────"
+                - echo " Lambda Deployment"
+                - echo "────────────────────────────────────────────"
+                - echo "Function - $LAMBDA_FUNCTION_NAME"
+                - ZIP_PATH="$CODEBUILD_SRC_DIR/lambda-deployment.zip"
+                - echo "ZIP path - $ZIP_PATH"
+                - ls -lh "$ZIP_PATH"
+                - |
+                  aws lambda update-function-code \
+                    --function-name "$LAMBDA_FUNCTION_NAME" \
+                    --zip-file "fileb://$ZIP_PATH" \
+                    --output json
+                - aws lambda wait function-updated --function-name "$LAMBDA_FUNCTION_NAME"
+                - echo "✔ Lambda deployment complete!"
       Artifacts:
         Type: CODEPIPELINE
       Environment:
@@ -190,7 +211,6 @@ Resources:
         ComputeType: BUILD_GENERAL1_SMALL
         ImagePullCredentialsType: CODEBUILD
         EnvironmentVariables:
-          # The deploy script reads this variable to know which function to update
           - Name: LAMBDA_FUNCTION_NAME
             Value: !Ref LambdaFunctionName
             Type: PLAINTEXT
@@ -250,14 +270,9 @@ Resources:
           Actions:
 
             # Action: Push ZIP → Lambda
-            #
-            # Two input artifacts are required:
-            #   SourceOutput (PRIMARY) — full repo source, contains
-            #     devops/code_pipeline/deploy_buildspec.yaml and deploy.sh
-            #   BuildOutput  (SECONDARY) — contains lambda-deployment.zip
-            #
-            # PrimarySource tells CodeBuild which artifact holds the buildspec.
-            # The secondary artifact is available at $CODEBUILD_SRC_DIR_BuildOutput.
+            # BuildOutput contains lambda-deployment.zip from the Build stage.
+            # The buildspec is inlined in the CodeBuild project above,
+            # so no source file lookup is needed.
             - Name: LambdaDeploy
               ActionTypeId:
                 Category: Build
@@ -265,11 +280,9 @@ Resources:
                 Provider: CodeBuild
                 Version: 1
               InputArtifacts:
-                - Name: SourceOutput   # PRIMARY — has deploy_buildspec.yaml + deploy.sh
-                - Name: BuildOutput    # SECONDARY — has lambda-deployment.zip
+                - Name: BuildOutput   # Contains lambda-deployment.zip
               Configuration:
                 ProjectName: !Ref LambdaDeployProject
-                PrimarySource: SourceOutput
               RunOrder: 1
 
 # ── Outputs ───────────────────────────────────────────────────
