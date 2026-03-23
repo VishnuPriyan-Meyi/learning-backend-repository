@@ -33,10 +33,10 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-# Export all variables from the env script natively
+# Export all variables from the env script natively, stripping Windows line endings dynamically
 set -a
 # shellcheck disable=SC1090
-source "$ENV_FILE"
+source <(sed 's/\r$//' "$ENV_FILE")
 set +a
 
 # ── Dynamic File Paths ───────────────────────────────────────
@@ -49,7 +49,7 @@ if [ ! -f "devops/utils.sh" ]; then
   echo "ERROR: devops/utils.sh not found."
   exit 1
 fi
-source devops/utils.sh
+source <(sed 's/\r$//' devops/utils.sh)
 
 # Validate required config vars are filled in
 REQUIRED_VARS=(GITHUB_ORG_REPO GITHUB_BRANCH
