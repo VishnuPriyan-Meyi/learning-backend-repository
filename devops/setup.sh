@@ -42,7 +42,7 @@ set +a
 # ── Dynamic File Paths ───────────────────────────────────────
 PIPELINE_TEMPLATE="devops/templates/pipeline.yaml"
 BACKEND_TEMPLATE="devops/templates/backend_template.yaml"
-SAM_BUILT_TEMPLATE=".aws-sam/build/template.yaml"
+SAM_BUILT_TEMPLATE="packaged.yaml"
 
 # ── Source Utility Functions ──────────────────────────────────
 if [ ! -f "devops/utils.sh" ]; then
@@ -118,19 +118,21 @@ divider
 echo "[ Step 4 ] Deploying infrastructure stack: $INFRA_STACK_NAME"
 info "Building and packaging the SAM application natively..."
 
-# sam build natively builds the BackendCode using CodeUri.
-sam build \
-  --template-file "$BACKEND_TEMPLATE"
+# sam package intelligently zips the local directory and uploads to S3, skipping 
+# native compiled builds, thus bypassing local WSL-to-Windows NPM bugs entirely.
+# CodePipeline handles the true `npm install` build securely in AWS later.
+sam package \
+  --template-file "$BACKEND_TEMPLATE" \
+  --s3-bucket "$ARTIFACTS_BUCKET" \
+  --output-template-file "$SAM_BUILT_TEMPLATE"
 
-info "Deploying SAM application..."
+info "Deploying SAM application natively..."
 
 sam deploy \
   --template-file "$SAM_BUILT_TEMPLATE" \
   --stack-name "$INFRA_STACK_NAME" \
-  --s3-bucket "$ARTIFACTS_BUCKET" \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-  --parameter-overrides \
-    LambdaFunctionName="$LAMBDA_FUNCTION_NAME" \
+  --parameter-overrides LambdaFunctionName="$LAMBDA_FUNCTION_NAME" \
   --no-fail-on-empty-changeset \
   --region "$AWS_REGION"
 
