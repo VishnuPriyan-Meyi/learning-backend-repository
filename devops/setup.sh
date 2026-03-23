@@ -25,19 +25,31 @@
 
 set -e  # Exit on any error
 
-# ── Load configuration from .env ─────────────────────────────
-ENV_FILE=".env"
+# ── Load configuration from dev.env.sh ─────────
+ENV_FILE="dev.env.sh"
 
 if [ ! -f "$ENV_FILE" ]; then
-  echo "ERROR: .env file not found in the repo root."
+  echo "ERROR: dev.env.sh file not found in the repo root."
   exit 1
 fi
 
-# Export all variables from .env (strip comments and blank lines)
+# Export all variables from the env script natively
 set -a
 # shellcheck disable=SC1090
-source <(grep -v '^\s*#' "$ENV_FILE" | grep -v '^\s*$' | sed 's/[[:space:]]*#.*//')
+source "$ENV_FILE"
 set +a
+
+# ── Dynamic File Paths ───────────────────────────────────────
+PIPELINE_TEMPLATE="devops/templates/pipeline.yaml"
+BACKEND_TEMPLATE="devops/templates/backend_template.yaml"
+SAM_BUILT_TEMPLATE=".aws-sam/build/template.yaml"
+
+# ── Source Utility Functions ──────────────────────────────────
+if [ ! -f "devops/utils.sh" ]; then
+  echo "ERROR: devops/utils.sh not found."
+  exit 1
+fi
+source devops/utils.sh
 
 # Validate required config vars are filled in
 REQUIRED_VARS=(GITHUB_ORG_REPO GITHUB_BRANCH
@@ -45,37 +57,7 @@ REQUIRED_VARS=(GITHUB_ORG_REPO GITHUB_BRANCH
                INFRA_STACK_NAME PIPELINE_STACK_NAME
                AWS_REGION GITHUB_CONNECTION_ARN)
 
-for VAR in "${REQUIRED_VARS[@]}"; do
-  VALUE="${!VAR}"
-  if [ -z "$VALUE" ] || [[ "$VALUE" == *"ORG/REPO"* ]]; then
-    echo "ERROR: '$VAR' is not set in .env. Please fill in all config values."
-    exit 1
-  fi
-done
-
-# ── Helper: safely update a single key in .env ───────────────
-update_env_var() {
-  local KEY="$1"
-  local VALUE="$2"
-  if grep -q "^${KEY}=" "$ENV_FILE"; then
-    sed -i "s|^${KEY}=.*|${KEY}=${VALUE}|" "$ENV_FILE"
-  else
-    echo "${KEY}=${VALUE}" >> "$ENV_FILE"
-  fi
-}
-
-# ── Colours ───────────────────────────────────────────────────
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-ok()      { echo -e "${GREEN}  ✔ $1${NC}"; }
-info()    { echo -e "${CYAN}  ► $1${NC}"; }
-warn()    { echo -e "${YELLOW}  ⚠ $1${NC}"; }
-fail()    { echo -e "${RED}  ✘ $1${NC}"; exit 1; }
-divider() { echo ""; echo "─────────────────────────────────────────────────"; echo ""; }
+validate_required_vars "${REQUIRED_VARS[@]}"
 
 # ──────────────────────────────────────────────────────────────
 
@@ -102,13 +84,14 @@ info "This creates IAM roles, CodeBuild projects, the Artifacts bucket, and the 
 info "(The pipeline will be PENDING until after Step 4 deploys the Lambda function.)"
 
 aws cloudformation deploy \
-  --template-file devops/templates/pipeline.yaml \
+  --template-file "$PIPELINE_TEMPLATE" \
   --stack-name "$PIPELINE_STACK_NAME" \
-  --capabilities CAPABILITY_NAMED_IAM \
+  --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
   --parameter-overrides \
     GitHubOrgRepo="$GITHUB_ORG_REPO" \
     GitHubBranch="$GITHUB_BRANCH" \
     LambdaFunctionName="$LAMBDA_FUNCTION_NAME" \
+    InfraStackName="$INFRA_STACK_NAME" \
     GitHubConnectionArn="$GITHUB_CONNECTION_ARN" \
   --region "$AWS_REGION"
 
@@ -131,36 +114,24 @@ update_env_var "ARTIFACTS_BUCKET" "$ARTIFACTS_BUCKET"
 ok ".env updated."
 divider
 
-# ── Step 4: Deploy Infrastructure (Lambda + API Gateway) ──────
+# ── Step 4: Deploy Infrastructure (Lambda + API Gateway) via SAM ──
 echo "[ Step 4 ] Deploying infrastructure stack: $INFRA_STACK_NAME"
-info "This creates the Lambda function, IAM execution role, and API Gateway HTTP API..."
-info "Note: Lambda needs an initial empty placeholder ZIP in S3 to create successfully."
+info "Building and packaging the SAM application natively..."
 
-# Ensure 'zip' is available — install it if missing (WSL/Ubuntu minimal)
-if ! command -v zip &>/dev/null; then
-  info "'zip' not found — installing..."
-  sudo apt-get install -y zip -q
-  ok "zip installed."
-fi
+# sam build natively builds the BackendCode using CodeUri.
+sam build \
+  --template-file "$BACKEND_TEMPLATE"
 
-# Create a minimal placeholder ZIP so CloudFormation can create the Lambda function.
-# The first pipeline run will immediately replace this with the real code.
-echo 'exports.handler = async () => ({ statusCode: 200, body: "pending first deploy" });' > /tmp/index.js
-cd /tmp && zip lambda-deployment.zip index.js && cd -
+info "Deploying SAM application..."
 
-aws s3 cp /tmp/lambda-deployment.zip \
-  "s3://${ARTIFACTS_BUCKET}/lambda-deployment.zip"
-
-ok "Placeholder ZIP uploaded to s3://${ARTIFACTS_BUCKET}/lambda-deployment.zip"
-
-aws cloudformation deploy \
-  --template-file devops/templates/backend_template.yaml \
+sam deploy \
+  --template-file "$SAM_BUILT_TEMPLATE" \
   --stack-name "$INFRA_STACK_NAME" \
-  --capabilities CAPABILITY_NAMED_IAM \
+  --s3-bucket "$ARTIFACTS_BUCKET" \
+  --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
   --parameter-overrides \
     LambdaFunctionName="$LAMBDA_FUNCTION_NAME" \
-    LambdaCodeS3Bucket="$ARTIFACTS_BUCKET" \
-    LambdaCodeS3Key="lambda-deployment.zip" \
+  --no-fail-on-empty-changeset \
   --region "$AWS_REGION"
 
 ok "Infrastructure stack deployed."

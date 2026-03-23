@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
 Description: >
-  Node.js Backend Infrastructure — Lambda Function + API Gateway (HTTP API).
+  Node.js Backend Infrastructure — SAM Template (Lambda Function + HTTP API).
   Creates the IAM execution role, Lambda function, and a public HTTP API endpoint.
-  The Lambda code ZIP is uploaded by CodePipeline on each deployment.
 
 Parameters:
 
@@ -10,22 +10,23 @@ Parameters:
     Type: String
     Description: Name for the Lambda function (e.g. learning-backend-function)
 
-  LambdaCodeS3Bucket:
-    Type: String
-    Description: >
-      S3 bucket that holds the Lambda deployment ZIP.
-      This is the CodePipeline Artifacts bucket — created by pipeline.yaml.
-      Fill this in AFTER running the pipeline stack the first time.
-      setup.sh auto-fills this from the pipeline stack's output.
-
-  LambdaCodeS3Key:
-    Type: String
-    Default: lambda-deployment.zip
-    Description: >
-      S3 key (path/filename) of the Lambda ZIP inside the artifacts bucket.
-      Must match the filename written by buildspec.yaml.
-
 Resources:
+
+  # ── API Gateway HTTP API (SAM) ─────────────────────────────────
+  BackendHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - '*'
 
   # ── IAM Role: Lambda Execution ────────────────────────────────
   # Lambda needs this role to write CloudWatch logs. Add more policies
@@ -45,93 +46,29 @@ Resources:
         # Grants permission to create log groups/streams in CloudWatch Logs
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
-  # ── Lambda Function ───────────────────────────────────────────
-  # The function's code is loaded from S3 on each deployment.
-  # CodePipeline uploads a fresh ZIP to S3 on every pipeline run,
-  # then updates this function's code via aws lambda update-function-code.
+  # ── Lambda Function (SAM) ──────────────────────────────────────
   BackendLambdaFunction:
-    Type: AWS::Lambda::Function
+    Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Ref LambdaFunctionName
       Description: Learning Backend — Node.js Lambda API
       Runtime: nodejs20.x
-      Handler: index.handler          # Calls exports.handler in index.js
+      Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 30                     # Max seconds per invocation
-      MemorySize: 128                 # MB — minimum, sufficient for simple APIs
-      Code:
-        S3Bucket: !Ref LambdaCodeS3Bucket
-        S3Key: !Ref LambdaCodeS3Key
+      Timeout: 30
+      MemorySize: 128
+      CodeUri: ../../backend-deployment/
       Environment:
         Variables:
           NODE_ENV: production
-
-  # ── Lambda Resource Policy ─────────────────────────────────────
-  # Grants API Gateway permission to invoke the Lambda function.
-  # Without this, API Gateway gets a 403 when it tries to call Lambda.
-  LambdaApiGatewayPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref BackendLambdaFunction
-      Action: lambda:InvokeFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${BackendHttpApi}/*/*'
-
-  # ── API Gateway HTTP API ───────────────────────────────────────
-  # HTTP API (v2) is cheaper and lower latency than REST API (v1).
-  # Routes ALL paths (/{proxy+}) and ALL methods ($default) to Lambda,
-  # so the Lambda handler itself does the routing.
-  BackendHttpApi:
-    Type: AWS::ApiGatewayV2::Api
-    Properties:
-      Name: !Sub '${LambdaFunctionName}-http-api'
-      Description: HTTP API for the Learning Backend Lambda function
-      ProtocolType: HTTP
-      # Enable CORS so the frontend (or Postman) can call the API
-      CorsConfiguration:
-        AllowOrigins:
-          - '*'
-        AllowMethods:
-          - GET
-          - POST
-          - PUT
-          - DELETE
-          - OPTIONS
-        AllowHeaders:
-          - '*'
-
-  # ── API Gateway Integration ──────────────────────────────────
-  # Connects the HTTP API to the Lambda function using AWS_PROXY
-  # (Lambda proxy integration) — API Gateway passes the full event
-  # object to Lambda and returns Lambda's response as-is.
-  LambdaIntegration:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref BackendHttpApi
-      IntegrationType: AWS_PROXY
-      IntegrationUri: !Sub >-
-        arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BackendLambdaFunction.Arn}/invocations
-      PayloadFormatVersion: '2.0'   # Matches API Gateway HTTP API event format
-
-  # ── API Gateway Route ──────────────────────────────────────────
-  # $default route catches ALL paths and methods → sends everything to Lambda.
-  # Lambda's in-handler router (index.js) then dispatches to the right handler.
-  DefaultRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref BackendHttpApi
-      RouteKey: '$default'
-      Target: !Sub 'integrations/${LambdaIntegration}'
-
-  # ── API Gateway Stage ──────────────────────────────────────────
-  # Auto-deploy = true means every route/integration change is published
-  # automatically without a manual deployment step.
-  DefaultStage:
-    Type: AWS::ApiGatewayV2::Stage
-    Properties:
-      ApiId: !Ref BackendHttpApi
-      StageName: '$default'
-      AutoDeploy: true
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BackendHttpApi
+            Path: $default
+            Method: x-amazon-apigateway-any-method
+            PayloadFormatVersion: '2.0'
 
 # ── Outputs ───────────────────────────────────────────────────
 Outputs:
@@ -147,3 +84,4 @@ Outputs:
   ApiEndpoint:
     Description: Public base URL of the HTTP API
     Value: !Sub 'https://${BackendHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+

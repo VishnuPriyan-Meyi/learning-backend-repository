@@ -1,41 +1,32 @@
 version: 0.2
 
-# ── buildspec.yaml — Lambda Build Phase ──────────────────────────────────────
+# ── buildspec.yaml — SAM Build Phase ─────────────────────────────────────────
 #
-# Lambda source lives in backend-deployment/ (inside the repo).
-# devops/ holds only pipeline config and is NOT included in the Lambda ZIP.
+# Stage 2: Runs sam build to compile the backend application, then runs
+#          sam package to upload the code to S3 and generate packaged.yaml
 #
-# IMPORTANT — CodeBuild persistent shell behaviour:
-#   All commands in a phase run in ONE persistent shell.
-#   A bare `cd backend-deployment` leaks the working directory to every
-#   subsequent command (and even to the next phase).
-#   Fix: wrap every `cd` in a subshell (...) so the change never leaks.
+# The pipeline injects the ARTIFACTS_BUCKET environment variable so
+# SAM knows where to store the compiled deployment ZIPs.
 # ─────────────────────────────────────────────────────────────────────────────
 
 phases:
-
   install:
     runtime-versions:
       nodejs: 20
     commands:
-      - echo "Installing Lambda dependencies..."
-      # ✅ Subshell — cd is isolated, CWD stays at source root after this command.
-      - (cd backend-deployment && npm install --production)
+      # AWS SAM CLI is pre-installed in the CodeBuild standard:7.0 image.
+      - sam --version
 
   build:
     commands:
-      - echo "Packaging Lambda function into ZIP..."
-      # ✅ Subshell — cd + zip together, output goes straight to CODEBUILD_SRC_DIR
-      #    (absolute path) so the artifact collector always finds it regardless
-      #    of what the shell's current working directory is.deploy_buildspec.yaml
-      - (cd backend-deployment && zip -r "$CODEBUILD_SRC_DIR/lambda-deployment.zip" .)
-      - echo "ZIP created:"
-      - ls -lh "$CODEBUILD_SRC_DIR/lambda-deployment.zip"
+      - echo "Building Serverless Application..."
+      # sam build natively reads CodeUri: ../../backend-deployment/ and runs npm install
+      - sam build -t devops/templates/backend_template.yaml
 
-# ── Artifacts ────────────────────────────────────────────────────────────────
-# CODEBUILD_SRC_DIR is the default artifact base directory.
-# lambda-deployment.zip is written there directly above.
+      - echo "Packaging Application & Uploading to S3..."
+      - sam package --s3-bucket "$ARTIFACTS_BUCKET" --output-template-file packaged.yaml
+
 artifacts:
   files:
-    - lambda-deployment.zip
+    - packaged.yaml
   discard-paths: yes

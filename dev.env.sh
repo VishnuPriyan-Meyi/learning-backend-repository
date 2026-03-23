@@ -10,7 +10,7 @@
 GITHUB_ORG_REPO=VishnuPriyan-Meyi/learning-backend-repository
 
 # Branch to watch and trigger the pipeline on.
-GITHUB_BRANCH=main
+GITHUB_BRANCH=feat/sam-backend-pipeline-stack
 
 # ARN of a manually created CodeStar GitHub connection.
 # Create in AWS Console:
