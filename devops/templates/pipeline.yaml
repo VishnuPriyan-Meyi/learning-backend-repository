@@ -1,9 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Node.js Backend CI/CD Pipeline — Lambda Deployment.
-  Defines ALL related resources in one stack:
-  IAM roles, CodeBuild projects, GitHub connection reference, and the pipeline.
+  Node.js Backend CI/CD Pipeline — Serverless Deployment.
+  Provisions the CodePipeline, CodeBuild containers, S3 Artifacts, and entirely fine-grained IAM logic.
 
 # ── Parameters ────────────────────────────────────────────────
 # These are passed in by setup.sh from .env values.
@@ -28,12 +27,20 @@ Parameters:
       ARN of a manually created and AVAILABLE CodeStar GitHub connection.
       Create this in AWS Console: CodePipeline > Settings > Connections > Create connection > GitHub
 
-  ArtifactsBucketName:
+  BootstrapStackName:
     Type: String
-    Description: Name of the existing shared artifact bucket
+    Description: Name of the shared artifact bootstrap stack
 
 # ── Resources ─────────────────────────────────────────────────
 Resources:
+
+  # ── Import Shared Artifacts Bucket ─────────────────────────────
+  # Import the shared artifact bucket from bootstrap stack using CloudFormation exports
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: 
+        Fn::ImportValue: SharedArtifactBucketName
 
   # ── IAM Role: CodePipeline ────────────────────────────────────
   # Allows CodePipeline to read/write S3, trigger CodeBuild, and use
@@ -64,8 +71,8 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:DeleteObject
                 Resource: 
-                  - !Sub "arn:aws:s3:::${ArtifactsBucketName}"
-                  - !Sub "arn:aws:s3:::${ArtifactsBucketName}/*"
+                  - !GetAtt ArtifactsBucket.Arn
+                  - !Sub "${ArtifactsBucket.Arn}/*"
               # CodeBuild — start builds and check status
               - Effect: Allow
                 Action:
@@ -74,7 +81,7 @@ Resources:
                   - codebuild:BatchGetProjects
                 Resource: 
                   - !GetAtt BackendBuildProject.Arn
-                  - !GetAtt LambdaDeployProject.Arn
+                  - !GetAtt BackendDeployProject.Arn
               # GitHub connection — pull source code
               - Effect: Allow
                 Action:
@@ -123,29 +130,61 @@ Resources:
                   - s3:GetBucketLocation
                   - s3:CreateBucket
                 Resource: 
-                  - !Sub "arn:aws:s3:::${ArtifactsBucketName}"
-                  - !Sub "arn:aws:s3:::${ArtifactsBucketName}/*"
+                  - !GetAtt ArtifactsBucket.Arn
+                  - !Sub "${ArtifactsBucket.Arn}/*"
                   - !Sub "arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*"
                   - !Sub "arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*/*"
               # Lambda + CloudFormation — update SAM stack and resources
               - Effect: Allow
                 Action:
-                  - cloudformation:*
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DeleteStack
                 Resource: 
                   - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${InfraStackName}/*"
                   - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${InfraStackName}"
                   - !Sub "arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31"
               - Effect: Allow
                 Action:
-                  - lambda:*
+                  - lambda:CreateFunction
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:DeleteFunction
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:ListTags
+                  - lambda:TagResource
+                  - lambda:UntagResource
                 Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*"
               - Effect: Allow
                 Action:
-                  - apigateway:*
+                  - apigateway:GET
+                  - apigateway:POST
+                  - apigateway:PUT
+                  - apigateway:PATCH
+                  - apigateway:DELETE
                 Resource: !Sub "arn:aws:apigateway:${AWS::Region}::/*"
               - Effect: Allow
                 Action:
-                  - iam:*
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PassRole
+                  - iam:TagRole
+                  - iam:UntagRole
                 Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/*"
               # CodeBuild Reports — optional test reporting
               - Effect: Allow
@@ -163,10 +202,8 @@ Resources:
   #   CodePipeline > Settings > Connections > Create connection > GitHub
   # Then paste the ARN into .env as GITHUB_CONNECTION_ARN.
 
-  # ── CodeBuild: Lambda Build Project ───────────────────────────
-  # Stage 2: Runs npm install + zips the backend-deployment/ folder.
-  # Equivalent to ReactBuildProject in the frontend pipeline.
-  # Uses devops/template_file/buildspec.yaml.
+  # ── CodeBuild: Build Configuration ────────────────────────────
+  # Executes the `sam package` architecture build.
   BackendBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -184,18 +221,14 @@ Resources:
         ImagePullCredentialsType: CODEBUILD
         EnvironmentVariables:
           - Name: ARTIFACTS_BUCKET
-            Value: !Ref ArtifactsBucketName
+            Value: !Ref ArtifactsBucket
             Type: PLAINTEXT
           - Name: ARTIFACT_BUCKET_PREFIX
             Value: backend/
             Type: PLAINTEXT
 
-  # ── CodeBuild: Lambda Deploy Project ──────────────────────────
-  # Stage 3: Calls aws lambda update-function-code to push the new ZIP.
-  # Equivalent to CloudFrontInvalidationProject in the frontend pipeline.
-  #
-  # Buildspec is INLINE (no external file dependency).
-  # Input artifact BuildOutput contains lambda-deployment.zip at $CODEBUILD_SRC_DIR.
+  # ── CodeBuild: Deploy Configuration ───────────────────────────
+  # Executes `sam deploy` to migrate the native CloudFormation templates onto AWS.
   LambdaDeployProject:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -212,11 +245,11 @@ Resources:
         ComputeType: BUILD_GENERAL1_SMALL
         ImagePullCredentialsType: CODEBUILD
         EnvironmentVariables:
+          - Name: ARTIFACTS_BUCKET
+            Value: !Ref ArtifactsBucket
+            Type: PLAINTEXT
           - Name: INFRA_STACK_NAME
             Value: !Ref InfraStackName
-            Type: PLAINTEXT
-          - Name: ARTIFACT_BUCKET_PREFIX
-            Value: backend/
             Type: PLAINTEXT
 
   # ── CodePipeline ──────────────────────────────────────────────
@@ -227,13 +260,12 @@ Resources:
 
       ArtifactStore:
         Type: S3
-        Location: !Ref ArtifactsBucketName
+        Location: !Ref ArtifactsBucket
 
       Stages:
 
         # ── Stage 1: Source ───────────────────────────────────────
-        # Pull code from GitHub whenever a push is made to the branch.
-        # Equivalent to the frontend's Source stage.
+        # Pull code natively from GitHub and stores the SourceOutput artifact.
         - Name: Source
           Actions:
             - Name: GitHubSource
@@ -250,8 +282,7 @@ Resources:
                 BranchName: !Ref GitHubBranch
 
         # ── Stage 2: Build ────────────────────────────────────────
-        # npm install + zip backend-deployment/ → lambda-deployment.zip
-        # Equivalent to the frontend's Build stage (React build).
+        # Packages the infrastructure securely via SAM CLI.
         - Name: Build
           Actions:
             - Name: LambdaBuild
@@ -268,15 +299,11 @@ Resources:
                 ProjectName: !Ref BackendBuildProject
 
         # ── Stage 3: Deploy ───────────────────────────────────────
-        # Push the ZIP to Lambda via aws lambda update-function-code.
-        # Equivalent to the frontend's Deploy stage (S3 upload + CF invalidation).
+        # Boots up the Deploy container to run native CloudFormation executions.
         - Name: Deploy
           Actions:
 
-            # Action: Push ZIP → Lambda
-            # BuildOutput contains lambda-deployment.zip from the Build stage.
-            # The buildspec is inlined in the CodeBuild project above,
-            # so no source file lookup is needed.
+            # Securely parses the Build stage parameters directly into the deployment runner.
             - Name: LambdaDeploy
               ActionTypeId:
                 Category: Build
@@ -300,4 +327,4 @@ Outputs:
 
   ArtifactsBucketName:
     Description: S3 bucket used for pipeline artifacts (also stores Lambda ZIPs)
-    Value: !Ref ArtifactsBucketName
+    Value: !Ref ArtifactsBucket

@@ -1,26 +1,14 @@
 #!/bin/bash
 
 # =============================================================
-# setup.sh — Fully Automated Prerequisites Setup Script
+# setup.sh — Automated Infrastructure Bootstrap
 #
-# Run this ONCE before anything else. It will:
+# Bootstraps the AWS SAM backend architecture and CI/CD CodePipeline.
+# Run this once locally to seed your AWS environment and dynamically
+# extract the deployed API URLs back into your local configuration.
 #
-#   1.  Validate AWS CLI + credentials
-#   2.  Deploy pipeline.yaml → creates IAM roles, CodeBuild
-#       projects, GitHub connection reference, Artifacts S3 bucket
-#       and the CodePipeline itself (all in one CloudFormation stack)
-#   3.  Fetch the Artifacts bucket name → auto-fill .env
-#   4.  Deploy backend_template.yaml → creates the Lambda function
-#       (with IAM execution role) + API Gateway HTTP API
-#   5.  Fetch outputs → auto-fill .env with Lambda name + API URL
-#   6.  Remind you to complete GitHub OAuth if needed
-#
-# NOTE: Pipeline stack is deployed FIRST so the Artifacts bucket
-#       exists before backend_template.yaml needs its S3 location.
-#
-# Usage (Git Bash or WSL on Windows):
-#   chmod +x devops/setup.sh
-#   ./devops/setup.sh
+# Usage:
+#   ./devops/setup.sh [environment] (default: dev)
 # =============================================================
 
 set -e  # Exit on any error
@@ -60,15 +48,9 @@ validate_required_vars "${REQUIRED_VARS[@]}"
 
 # ──────────────────────────────────────────────────────────────
 
-# ── Step 1: Validate AWS CLI ─────────────────────────────────
 validate_aws_cli
 
-# ── Step 2: Deploy Pipeline Stack (creates Artifacts bucket first) ──
-# pipeline.yaml defines EVERYTHING in one CloudFormation stack:
-#   - IAM roles (BackendCodePipelineRole, BackendCodeBuildRole)
-#   - Artifacts S3 bucket (also stores Lambda ZIPs)
-#   - CodeBuild projects (build + deploy)
-#   - The CodePipeline itself
+# Deploys CodePipeline, CodeBuild, S3 Artifacts, and IAM Security Roles.
 echo "[ Step 2 ] Deploying pipeline stack: ${STACK[PIPELINE_NAME]}"
 info "This creates IAM roles, CodeBuild projects, the Artifacts bucket, and the pipeline..."
 info "(The pipeline will be PENDING until after Step 4 deploys the Lambda function.)"
@@ -82,33 +64,35 @@ sam deploy \
     GitHubBranch="${GITHUB[BRANCH]}" \
     InfraStackName="${STACK[INFRA_NAME]}" \
     GitHubConnectionArn="${GITHUB[CONNECTION_ARN]}" \
-    ArtifactsBucketName="$SHARED_ARTIFACT_BUCKET_NAME" \
+    BootstrapStackName="${BOOTSTRAP[STACK_NAME]}" \
   --no-fail-on-empty-changeset \
   --region "${AWS[REGION]}"
 
 ok "Pipeline stack deployed."
 divider
 
-# ── Step 3: Use Shared Artifacts Bucket ────────────────────────
-echo "[ Step 3 ] Using shared artifacts bucket..."
+echo "[ Step 3 ] Fetching pipeline stack outputs..."
 
-ARTIFACTS_BUCKET="$SHARED_ARTIFACT_BUCKET_NAME"
-ok "Using Shared Artifacts Bucket: $ARTIFACTS_BUCKET"
+ARTIFACTS_BUCKET=$(aws cloudformation describe-stacks \
+  --stack-name "${STACK[PIPELINE_NAME]}" \
+  --region "${AWS[REGION]}" \
+  --query "Stacks[0].Outputs[?OutputKey=='ArtifactsBucketName'].OutputValue" \
+  --output text)
 
-info "Updating .env with bucket information..."
+ok "Artifacts Bucket: $ARTIFACTS_BUCKET"
+
+info "Updating .env with auto-filled values..."
 update_env_var "ARTIFACTS_BUCKET" "$ARTIFACTS_BUCKET"
 ok ".env updated."
 divider
 
-# ── Step 4: Deploy Infrastructure (Lambda + API Gateway) via SAM ──
 echo "[ Step 4 ] Deploying infrastructure stack: ${STACK[INFRA_NAME]}"
 info "Building and packaging the SAM application natively..."
 
-# sam package now uses the shared bucket instead of creating a bootstrap bucket
+# Compiles local codebase securely to AWS SAM Managed S3 buckets
 sam package \
   --template-file "$BACKEND_TEMPLATE" \
-  --s3-bucket "$ARTIFACTS_BUCKET" \
-  --s3-prefix "backend/lambda-code" \
+  --resolve-s3 \
   --output-template-file "$SAM_BUILT_TEMPLATE"
 
 info "Deploying SAM application natively..."
@@ -124,7 +108,6 @@ sam deploy \
 ok "Infrastructure stack deployed."
 divider
 
-# ── Step 5: Fetch Lambda + API Gateway Outputs + Update .env ──
 echo "[ Step 5 ] Fetching infrastructure stack outputs..."
 
 LAMBDA_NAME=$(aws cloudformation describe-stacks \

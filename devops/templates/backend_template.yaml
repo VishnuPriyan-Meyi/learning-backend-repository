@@ -10,17 +10,27 @@ Parameters:
     Type: String
     Description: Name for the Lambda function (e.g. learning-backend-function)
 
+  ApiStageName:
+    Type: String
+    Default: Prod
+    Description: Name of the API Gateway stage (e.g. dev, prod)
+
+  CorsAllowOrigin:
+    Type: String
+    Default: "'*'"
+    Description: "CORS AllowOrigin header enclosed in single quotes (e.g. \"'*'\" or \"'https://example.com'\")"
+
 Resources:
 
   # ── API Gateway REST API (SAM) ─────────────────────────────────
   BackendRestApi:
     Type: AWS::Serverless::Api
     Properties:
-      StageName: Prod
+      StageName: !Ref ApiStageName
       Cors: 
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         AllowHeaders: "'*'"
-        AllowOrigin: "'*'"
+        AllowOrigin: !Ref CorsAllowOrigin
 
   # ── IAM Role: Lambda Execution ────────────────────────────────
   # Lambda needs this role to write CloudWatch logs. Add more policies
@@ -82,5 +92,5 @@ Outputs:
 
   ApiEndpoint:
     Description: Public base URL of the REST API
-    Value: !Sub 'https://${BackendRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/'
+    Value: !Sub 'https://${BackendRestApi}.execute-api.${AWS::Region}.amazonaws.com/${ApiStageName}/'
 

@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Shared Artifact Bucket for Frontend and Backend Pipelines
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Unique S3 bucket name for artifacts
+
+Resources:
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+
+          # Allow CodePipeline access
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:GetBucketVersioning
+            Resource:
+              - !Sub "${ArtifactBucket.Arn}/*"
+              - !GetAtt ArtifactBucket.Arn
+
+          # Allow CodeBuild access
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:GetObjectVersion
+            Resource:
+              - !Sub "${ArtifactBucket.Arn}/*"
+
+Outputs:
+
+  ArtifactBucketName:
+    Description: Shared artifact bucket name
+    Value: !Ref ArtifactBucket
+    Export:
+      Name: SharedArtifactBucketName
+
+  ArtifactBucketArn:
+    Description: Shared artifact bucket ARN
+    Value: !GetAtt ArtifactBucket.Arn
+    Export:
+      Name: SharedArtifactBucketArn
