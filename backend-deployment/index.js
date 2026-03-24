@@ -10,8 +10,9 @@ console.log("[event] - ",event)
     },
     body: JSON.stringify({
       status: 'ok',
-      message: 'Learning Backend Lambda is running!',
+      message: 'Learning Backend Lambda is running!',  
       timestamp: new Date().toISOString(),
+      event: event
     }),
   };
 };
