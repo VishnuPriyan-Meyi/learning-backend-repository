@@ -42,7 +42,7 @@ Resources:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
     Properties:
-      BucketName: !Ref SharedArtifactBucketName
+      BucketName: !Ref ArtifactsBucketName
     Metadata:
       Comment: "Existing shared bucket - pipeline validates access only"
 
