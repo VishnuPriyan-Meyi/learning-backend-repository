@@ -39,6 +39,8 @@ Resources:
   # Import the shared artifact bucket and create a backend-specific prefix
   ArtifactsBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: true
     Properties:
       BucketName: !Ref SharedArtifactBucketName
 
