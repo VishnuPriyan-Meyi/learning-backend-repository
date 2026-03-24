@@ -22,9 +22,19 @@ divider() { echo ""; echo "─────────────────�
 validate_required_vars() {
   local vars=("$@")
   for VAR in "${vars[@]}"; do
-    VALUE="${!VAR}"
-    if [ -z "$VALUE" ] || [[ "$VALUE" == *"ORG/REPO"* ]]; then
-      fail "ERROR: '$VAR' is not set properly. Please fill in all config values in the environment file."
+    # Check if it's an associative array (object)
+    if declare -p "$VAR" 2>/dev/null | grep -q "declare -A"; then
+      # It's an associative array, check if it's not empty
+      local keys="${!VAR[@]}"
+      if [ -z "$keys" ]; then
+        fail "ERROR: '$VAR' is not set properly. Please fill in all config values in the environment file."
+      fi
+    else
+      # It's a regular variable
+      VALUE="${!VAR}"
+      if [ -z "$VALUE" ] || [[ "$VALUE" == *"ORG/REPO"* ]]; then
+        fail "ERROR: '$VAR' is not set properly. Please fill in all config values in the environment file."
+      fi
     fi
   done
 }
@@ -58,6 +68,6 @@ validate_aws_cli() {
   account_id=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null) \
     || fail "AWS CLI not configured. Run: aws configure"
 
-  ok "AWS CLI OK. Account: $account_id | Region: $AWS_REGION"
+  ok "AWS CLI OK. Account: $account_id | Region: ${AWS[REGION]}"
   divider
 }

@@ -54,11 +54,7 @@ fi
 source <(sed -e 's/\r$//' devops/utils.sh)
 
 # Validate required config vars are filled in
-REQUIRED_VARS=(GITHUB_ORG_REPO GITHUB_BRANCH
-               LAMBDA_FUNCTION_NAME
-               INFRA_STACK_NAME PIPELINE_STACK_NAME
-               AWS_REGION GITHUB_CONNECTION_ARN
-               SHARED_ARTIFACT_BUCKET_NAME)
+REQUIRED_VARS=(GITHUB AWS STACK SHARED_ARTIFACT_BUCKET_NAME)
 
 validate_required_vars "${REQUIRED_VARS[@]}"
 
@@ -73,22 +69,22 @@ validate_aws_cli
 #   - Artifacts S3 bucket (also stores Lambda ZIPs)
 #   - CodeBuild projects (build + deploy)
 #   - The CodePipeline itself
-echo "[ Step 2 ] Deploying pipeline stack: $PIPELINE_STACK_NAME"
+echo "[ Step 2 ] Deploying pipeline stack: ${STACK[PIPELINE_NAME]}"
 info "This creates IAM roles, CodeBuild projects, the Artifacts bucket, and the pipeline..."
 info "(The pipeline will be PENDING until after Step 4 deploys the Lambda function.)"
 
 sam deploy \
   --template-file "$PIPELINE_TEMPLATE" \
-  --stack-name "$PIPELINE_STACK_NAME" \
+  --stack-name "${STACK[PIPELINE_NAME]}" \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
   --parameter-overrides \
-    GitHubOrgRepo="$GITHUB_ORG_REPO" \
-    GitHubBranch="$GITHUB_BRANCH" \
-    InfraStackName="$INFRA_STACK_NAME" \
-    GitHubConnectionArn="$GITHUB_CONNECTION_ARN" \
+    GitHubOrgRepo="${GITHUB[ORG]}/${GITHUB[REPO]}" \
+    GitHubBranch="${GITHUB[BRANCH]}" \
+    InfraStackName="${STACK[INFRA_NAME]}" \
+    GitHubConnectionArn="${GITHUB[CONNECTION_ARN]}" \
     SharedArtifactBucketName="$SHARED_ARTIFACT_BUCKET_NAME" \
   --no-fail-on-empty-changeset \
-  --region "$AWS_REGION"
+  --region "${AWS[REGION]}"
 
 ok "Pipeline stack deployed."
 divider
@@ -105,7 +101,7 @@ ok ".env updated."
 divider
 
 # ── Step 4: Deploy Infrastructure (Lambda + API Gateway) via SAM ──
-echo "[ Step 4 ] Deploying infrastructure stack: $INFRA_STACK_NAME"
+echo "[ Step 4 ] Deploying infrastructure stack: ${STACK[INFRA_NAME]}"
 info "Building and packaging the SAM application natively..."
 
 # sam package now uses the shared bucket instead of creating a bootstrap bucket
@@ -119,11 +115,11 @@ info "Deploying SAM application natively..."
 
 sam deploy \
   --template-file "$SAM_BUILT_TEMPLATE" \
-  --stack-name "$INFRA_STACK_NAME" \
+  --stack-name "${STACK[INFRA_NAME]}" \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-  --parameter-overrides LambdaFunctionName="$LAMBDA_FUNCTION_NAME" \
+  --parameter-overrides LambdaFunctionName="${STACK[LAMBDA_NAME]}" \
   --no-fail-on-empty-changeset \
-  --region "$AWS_REGION"
+  --region "${AWS[REGION]}"
 
 ok "Infrastructure stack deployed."
 divider
@@ -132,14 +128,14 @@ divider
 echo "[ Step 5 ] Fetching infrastructure stack outputs..."
 
 LAMBDA_NAME=$(aws cloudformation describe-stacks \
-  --stack-name "$INFRA_STACK_NAME" \
-  --region "$AWS_REGION" \
+  --stack-name "${STACK[INFRA_NAME]}" \
+  --region "${AWS[REGION]}" \
   --query "Stacks[0].Outputs[?OutputKey=='LambdaFunctionName'].OutputValue" \
   --output text)
 
 API_ENDPOINT=$(aws cloudformation describe-stacks \
-  --stack-name "$INFRA_STACK_NAME" \
-  --region "$AWS_REGION" \
+  --stack-name "${STACK[INFRA_NAME]}" \
+  --region "${AWS[REGION]}" \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text)
 
@@ -160,17 +156,17 @@ echo -e "${GREEN}  ╚═══════════════════�
 echo ""
 echo "  Lambda Function: $LAMBDA_NAME"
 echo "  API Endpoint:    $API_ENDPOINT"
-echo "  Pipeline Stack:  $PIPELINE_STACK_NAME"
+echo "  Pipeline Stack:  ${STACK[PIPELINE_NAME]}"
 echo ""
 echo -e "${CYAN}  Push your code to trigger the pipeline:${NC}"
 echo ""
 echo "    git add ."
 echo "    git commit -m \"initial deploy\""
-echo "    git push origin $GITHUB_BRANCH"
+echo "    git push origin ${GITHUB[BRANCH]}"
 echo ""
 echo "  Monitor pipeline:"
-echo "  https://$AWS_REGION.console.aws.amazon.com/codesuite/codepipeline/pipelines"
+echo "  https://${AWS[REGION]}.console.aws.amazon.com/codesuite/codepipeline/pipelines"
 echo ""
 echo -e "${YELLOW}  ⚠ If the GitHub connection is PENDING, complete OAuth here:${NC}"
-echo "  https://$AWS_REGION.console.aws.amazon.com/codesuite/settings/connections"
+echo "  https://${AWS[REGION]}.console.aws.amazon.com/codesuite/settings/connections"
 echo ""

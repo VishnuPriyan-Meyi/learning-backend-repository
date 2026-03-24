@@ -25,19 +25,8 @@ declare -A STACK=(
   [PIPELINE_NAME]="learning-backend-pipeline"
 )
 
-# =============================================================
-# EXPORTS (Translates object properties back into flat strings 
-# so AWS CodePipeline and setup.sh can officially read them)
-# =============================================================
-GITHUB_ORG_REPO="${GITHUB[ORG]}/${GITHUB[REPO]}"
-GITHUB_BRANCH="${GITHUB[BRANCH]}"
-GITHUB_CONNECTION_ARN="${GITHUB[CONNECTION_ARN]}"
-
-AWS_REGION="${AWS[REGION]}"
-
-LAMBDA_FUNCTION_NAME="${STACK[LAMBDA_NAME]}"
-INFRA_STACK_NAME="${STACK[INFRA_NAME]}"
-PIPELINE_STACK_NAME="${STACK[PIPELINE_NAME]}"
+# ── Additional Config ───────────────────────────────────────────
+SHARED_ARTIFACT_BUCKET_NAME="shared-artifact-bucket-1774342574"
 
 # ── Auto-filled by setup.sh — DO NOT EDIT MANUALLY ───────────
 # These are populated automatically after setup.sh runs.
