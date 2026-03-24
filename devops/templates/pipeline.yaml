@@ -228,9 +228,6 @@ Resources:
       ArtifactStore:
         Type: S3
         Location: !Ref ArtifactsBucketName
-        EncryptionKey:
-          Id: aws/s3
-          Type: KMS
 
       Stages:
 
