@@ -83,6 +83,7 @@ sam deploy \
   --parameter-overrides \
     GitHubOrgRepo="$GITHUB_ORG_REPO" \
     GitHubBranch="$GITHUB_BRANCH" \
+    LambdaFunctionName="$LAMBDA_FUNCTION_NAME" \
     InfraStackName="$INFRA_STACK_NAME" \
     GitHubConnectionArn="$GITHUB_CONNECTION_ARN" \
   --no-fail-on-empty-changeset \

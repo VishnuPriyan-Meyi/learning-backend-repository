@@ -19,7 +19,9 @@ Parameters:
     Default: main
     Description: Branch to watch and trigger the pipeline on
 
-
+  LambdaFunctionName:
+    Type: String
+    Description: Name of the Lambda function to deploy to.
 
   InfraStackName:
     Type: String
@@ -84,7 +86,7 @@ Resources:
                   - codebuild:BatchGetProjects
                 Resource: 
                   - !GetAtt BackendBuildProject.Arn
-                  - !GetAtt BackendDeployProject.Arn
+                  - !GetAtt LambdaDeployProject.Arn
               # GitHub connection — pull source code
               - Effect: Allow
                 Action:
