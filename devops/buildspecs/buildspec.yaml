@@ -23,8 +23,8 @@ phases:
       # sam build natively reads CodeUri: ../../backend-deployment/ and runs npm install
       - sam build -t devops/templates/backend_template.yaml
 
-      - echo "Packaging Application & Uploading natively via SAM Bootstrap..."
-      - sam package --resolve-s3 --output-template-file packaged.yaml
+      - echo "Packaging Application & Uploading to Shared Bucket..."
+      - sam package --s3-bucket "$ARTIFACTS_BUCKET" --s3-prefix "${ARTIFACT_BUCKET_PREFIX}lambda-code" --output-template-file packaged.yaml
 
 artifacts:
   files:

@@ -9,7 +9,7 @@
 declare -A GITHUB=(
   [ORG]="VishnuPriyan-Meyi"
   [REPO]="learning-backend-repository"
-  [BRANCH]="feat/sam-backend-pipeline-stack"
+  [BRANCH]="feat/bootstrap-backend-pipeline"
   [CONNECTION_ARN]="arn:aws:codeconnections:ap-south-1:369606757523:connection/08feb4da-3348-4e18-9a1f-22a144db6021"
 )
 
@@ -43,4 +43,4 @@ PIPELINE_STACK_NAME="${STACK[PIPELINE_NAME]}"
 # These are populated automatically after setup.sh runs.
 ARTIFACTS_BUCKET=learning-backend-pipeline-artifactsbucket-sibtvaonniqp
 LAMBDA_NAME=learning-backend-function
-API_ENDPOINT=https://2d257ibbo1.execute-api.us-east-1.amazonaws.com
+API_ENDPOINT=https://2d257ibbo1.execute-api.us-east-1.amazonaws.com

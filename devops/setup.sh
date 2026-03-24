@@ -57,7 +57,8 @@ source <(sed -e 's/\r$//' devops/utils.sh)
 REQUIRED_VARS=(GITHUB_ORG_REPO GITHUB_BRANCH
                LAMBDA_FUNCTION_NAME
                INFRA_STACK_NAME PIPELINE_STACK_NAME
-               AWS_REGION GITHUB_CONNECTION_ARN)
+               AWS_REGION GITHUB_CONNECTION_ARN
+               SHARED_ARTIFACT_BUCKET_NAME)
 
 validate_required_vars "${REQUIRED_VARS[@]}"
 
@@ -83,27 +84,22 @@ sam deploy \
   --parameter-overrides \
     GitHubOrgRepo="$GITHUB_ORG_REPO" \
     GitHubBranch="$GITHUB_BRANCH" \
-    LambdaFunctionName="$LAMBDA_FUNCTION_NAME" \
     InfraStackName="$INFRA_STACK_NAME" \
     GitHubConnectionArn="$GITHUB_CONNECTION_ARN" \
+    SharedArtifactBucketName="$SHARED_ARTIFACT_BUCKET_NAME" \
   --no-fail-on-empty-changeset \
   --region "$AWS_REGION"
 
 ok "Pipeline stack deployed."
 divider
 
-# ── Step 3: Fetch Artifacts Bucket name + Update .env ─────────
-echo "[ Step 3 ] Fetching pipeline stack outputs..."
+# ── Step 3: Use Shared Artifacts Bucket ────────────────────────
+echo "[ Step 3 ] Using shared artifacts bucket..."
 
-ARTIFACTS_BUCKET=$(aws cloudformation describe-stacks \
-  --stack-name "$PIPELINE_STACK_NAME" \
-  --region "$AWS_REGION" \
-  --query "Stacks[0].Outputs[?OutputKey=='ArtifactsBucketName'].OutputValue" \
-  --output text)
+ARTIFACTS_BUCKET="$SHARED_ARTIFACT_BUCKET_NAME"
+ok "Using Shared Artifacts Bucket: $ARTIFACTS_BUCKET"
 
-ok "Artifacts Bucket: $ARTIFACTS_BUCKET"
-
-info "Updating .env with auto-filled values..."
+info "Updating .env with bucket information..."
 update_env_var "ARTIFACTS_BUCKET" "$ARTIFACTS_BUCKET"
 ok ".env updated."
 divider
@@ -112,12 +108,11 @@ divider
 echo "[ Step 4 ] Deploying infrastructure stack: $INFRA_STACK_NAME"
 info "Building and packaging the SAM application natively..."
 
-# sam package intelligently zips the local directory and uploads to S3, skipping 
-# native compiled builds, thus bypassing local WSL-to-Windows NPM bugs entirely.
-# CodePipeline handles the true `npm install` build securely in AWS later.
+# sam package now uses the shared bucket instead of creating a bootstrap bucket
 sam package \
   --template-file "$BACKEND_TEMPLATE" \
-  --resolve-s3 \
+  --s3-bucket "$ARTIFACTS_BUCKET" \
+  --s3-prefix "backend/lambda-code" \
   --output-template-file "$SAM_BUILT_TEMPLATE"
 
 info "Deploying SAM application natively..."
