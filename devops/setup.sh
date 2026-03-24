@@ -82,7 +82,7 @@ sam deploy \
     GitHubBranch="${GITHUB[BRANCH]}" \
     InfraStackName="${STACK[INFRA_NAME]}" \
     GitHubConnectionArn="${GITHUB[CONNECTION_ARN]}" \
-    SharedArtifactBucketName="$SHARED_ARTIFACT_BUCKET_NAME" \
+    ArtifactsBucketName="$SHARED_ARTIFACT_BUCKET_NAME" \
   --no-fail-on-empty-changeset \
   --region "${AWS[REGION]}"
 

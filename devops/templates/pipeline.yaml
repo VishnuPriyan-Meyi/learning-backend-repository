@@ -28,21 +28,23 @@ Parameters:
       ARN of a manually created and AVAILABLE CodeStar GitHub connection.
       Create this in AWS Console: CodePipeline > Settings > Connections > Create connection > GitHub
 
-  SharedArtifactBucketName:
+  ArtifactsBucketName:
     Type: String
-    Description: Name of the shared artifact bucket (imported from shared stack)
+    Description: Name of the existing shared artifact bucket
 
 # ── Resources ─────────────────────────────────────────────────
 Resources:
 
-  # ── Import Shared Artifacts Bucket ───────────────────────────────
-  # Import the shared artifact bucket and create a backend-specific prefix
+  # ── Use Existing Shared Artifacts Bucket ─────────────────────
+  # Reference to existing shared bucket - don't create new one
+  # CloudFormation will validate access but won't try to create
   ArtifactsBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
-    UpdateReplacePolicy: true
     Properties:
       BucketName: !Ref SharedArtifactBucketName
+    Metadata:
+      Comment: "Existing shared bucket - pipeline validates access only"
 
   # ── IAM Role: CodePipeline ────────────────────────────────────
   # Allows CodePipeline to read/write S3, trigger CodeBuild, and use
