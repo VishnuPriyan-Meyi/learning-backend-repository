@@ -77,23 +77,27 @@ Resources:
                   - s3:ListBucket
                   - s3:GetObjectVersion
                   - s3:DeleteObject
-                Resource: '*'
+                Resource: 
+                  - !GetAtt ArtifactsBucket.Arn
+                  - !Sub "${ArtifactsBucket.Arn}/*"
               # CodeBuild — start builds and check status
               - Effect: Allow
                 Action:
                   - codebuild:StartBuild
                   - codebuild:BatchGetBuilds
                   - codebuild:BatchGetProjects
-                Resource: '*'
+                Resource: 
+                  - !GetAtt BackendBuildProject.Arn
+                  - !GetAtt BackendDeployProject.Arn
               # GitHub connection — pull source code
               - Effect: Allow
                 Action:
                   - codestar-connections:UseConnection
-                Resource: '*'
+                Resource: !Ref GitHubConnectionArn
               - Effect: Allow
                 Action:
                   - iam:PassRole
-                Resource: '*'
+                Resource: !GetAtt BackendCodeBuildRole.Arn
 
   # ── IAM Role: CodeBuild ───────────────────────────────────────
   # Allows CodeBuild to write CloudWatch logs, access S3 artifacts,
@@ -120,7 +124,8 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: '*'
+                Resource: 
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"
               # S3 — read source artifact, write Lambda ZIP artifact
               - Effect: Allow
                 Action:
@@ -130,15 +135,32 @@ Resources:
                   - s3:ListBucket
                   - s3:GetBucketAcl
                   - s3:GetBucketLocation
-                Resource: '*'
+                  - s3:CreateBucket
+                Resource: 
+                  - !GetAtt ArtifactsBucket.Arn
+                  - !Sub "${ArtifactsBucket.Arn}/*"
+                  - !Sub "arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*"
+                  - !Sub "arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*/*"
               # Lambda + CloudFormation — update SAM stack and resources
               - Effect: Allow
                 Action:
-                  - lambda:*
-                  - apigateway:*
                   - cloudformation:*
+                Resource: 
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${InfraStackName}/*"
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${InfraStackName}"
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31"
+              - Effect: Allow
+                Action:
+                  - lambda:*
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*"
+              - Effect: Allow
+                Action:
+                  - apigateway:*
+                Resource: !Sub "arn:aws:apigateway:${AWS::Region}::/*"
+              - Effect: Allow
+                Action:
                   - iam:*
-                Resource: '*'
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/*"
               # CodeBuild Reports — optional test reporting
               - Effect: Allow
                 Action:
@@ -146,7 +168,7 @@ Resources:
                   - codebuild:CreateReport
                   - codebuild:UpdateReport
                   - codebuild:BatchPutTestCases
-                Resource: '*'
+                Resource: !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:report-group/*"
 
   # ── GitHub Connection ─────────────────────────────────────────
   # NOTE: The connection is NOT created by CloudFormation here.
@@ -174,10 +196,6 @@ Resources:
         Image: aws/codebuild/standard:7.0
         ComputeType: BUILD_GENERAL1_SMALL
         ImagePullCredentialsType: CODEBUILD
-        EnvironmentVariables:
-          - Name: ARTIFACTS_BUCKET
-            Value: !Ref ArtifactsBucket
-            Type: PLAINTEXT
 
   # ── CodeBuild: Lambda Deploy Project ──────────────────────────
   # Stage 3: Calls aws lambda update-function-code to push the new ZIP.

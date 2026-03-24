@@ -25,18 +25,20 @@
 
 set -e  # Exit on any error
 
-# ── Load configuration from dev.env.sh ─────────
-ENV_FILE="dev.env.sh"
+# ── Load configuration environment dynamically ─────────
+ENV_PREFIX="${1:-dev}"
+ENV_FILE="${ENV_PREFIX}.env.sh"
 
 if [ ! -f "$ENV_FILE" ]; then
-  echo "ERROR: dev.env.sh file not found in the repo root."
+  echo "ERROR: $ENV_FILE not found in the repo root."
+  echo "Usage: ./devops/setup.sh [environment] (default: dev)"
   exit 1
 fi
 
-# Export all variables from the env script natively, stripping Windows line endings dynamically
+# Export all variables from the env script natively
 set -a
 # shellcheck disable=SC1090
-source <(sed 's/\r$//' "$ENV_FILE")
+source "$ENV_FILE"
 set +a
 
 # ── Dynamic File Paths ───────────────────────────────────────
@@ -49,7 +51,7 @@ if [ ! -f "devops/utils.sh" ]; then
   echo "ERROR: devops/utils.sh not found."
   exit 1
 fi
-source <(sed 's/\r$//' devops/utils.sh)
+source devops/utils.sh
 
 # Validate required config vars are filled in
 REQUIRED_VARS=(GITHUB_ORG_REPO GITHUB_BRANCH
@@ -62,16 +64,7 @@ validate_required_vars "${REQUIRED_VARS[@]}"
 # ──────────────────────────────────────────────────────────────
 
 # ── Step 1: Validate AWS CLI ─────────────────────────────────
-echo "[ Step 1 ] Validating AWS CLI..."
-
-command -v aws &>/dev/null \
-  || fail "AWS CLI not installed. Visit: https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html"
-
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null) \
-  || fail "AWS CLI not configured. Run: aws configure"
-
-ok "AWS CLI OK. Account: $AWS_ACCOUNT_ID | Region: $AWS_REGION"
-divider
+validate_aws_cli
 
 # ── Step 2: Deploy Pipeline Stack (creates Artifacts bucket first) ──
 # pipeline.yaml defines EVERYTHING in one CloudFormation stack:
@@ -83,16 +76,16 @@ echo "[ Step 2 ] Deploying pipeline stack: $PIPELINE_STACK_NAME"
 info "This creates IAM roles, CodeBuild projects, the Artifacts bucket, and the pipeline..."
 info "(The pipeline will be PENDING until after Step 4 deploys the Lambda function.)"
 
-aws cloudformation deploy \
+sam deploy \
   --template-file "$PIPELINE_TEMPLATE" \
   --stack-name "$PIPELINE_STACK_NAME" \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
   --parameter-overrides \
     GitHubOrgRepo="$GITHUB_ORG_REPO" \
     GitHubBranch="$GITHUB_BRANCH" \
-    LambdaFunctionName="$LAMBDA_FUNCTION_NAME" \
     InfraStackName="$INFRA_STACK_NAME" \
     GitHubConnectionArn="$GITHUB_CONNECTION_ARN" \
+  --no-fail-on-empty-changeset \
   --region "$AWS_REGION"
 
 ok "Pipeline stack deployed."
@@ -123,7 +116,7 @@ info "Building and packaging the SAM application natively..."
 # CodePipeline handles the true `npm install` build securely in AWS later.
 sam package \
   --template-file "$BACKEND_TEMPLATE" \
-  --s3-bucket "$ARTIFACTS_BUCKET" \
+  --resolve-s3 \
   --output-template-file "$SAM_BUILT_TEMPLATE"
 
 info "Deploying SAM application natively..."

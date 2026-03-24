@@ -12,21 +12,15 @@ Parameters:
 
 Resources:
 
-  # ── API Gateway HTTP API (SAM) ─────────────────────────────────
-  BackendHttpApi:
-    Type: AWS::Serverless::HttpApi
+  # ── API Gateway REST API (SAM) ─────────────────────────────────
+  BackendRestApi:
+    Type: AWS::Serverless::Api
     Properties:
-      CorsConfiguration:
-        AllowOrigins:
-          - '*'
-        AllowMethods:
-          - GET
-          - POST
-          - PUT
-          - DELETE
-          - OPTIONS
-        AllowHeaders:
-          - '*'
+      StageName: Prod
+      Cors: 
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
 
   # ── IAM Role: Lambda Execution ────────────────────────────────
   # Lambda needs this role to write CloudWatch logs. Add more policies
@@ -62,13 +56,18 @@ Resources:
         Variables:
           NODE_ENV: production
       Events:
-        ApiEvent:
-          Type: HttpApi
+        ApiProxyEvent:
+          Type: Api
           Properties:
-            ApiId: !Ref BackendHttpApi
-            Path: $default
-            Method: x-amazon-apigateway-any-method
-            PayloadFormatVersion: '2.0'
+            RestApiId: !Ref BackendRestApi
+            Path: /{proxy+}
+            Method: ANY
+        ApiRootEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BackendRestApi
+            Path: /
+            Method: ANY
 
 # ── Outputs ───────────────────────────────────────────────────
 Outputs:
@@ -82,6 +81,6 @@ Outputs:
     Value: !GetAtt BackendLambdaFunction.Arn
 
   ApiEndpoint:
-    Description: Public base URL of the HTTP API
-    Value: !Sub 'https://${BackendHttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+    Description: Public base URL of the REST API
+    Value: !Sub 'https://${BackendRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/'
 

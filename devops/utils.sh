@@ -45,3 +45,19 @@ update_env_var() {
     echo "export ${KEY}=${VALUE}" >> "$ENV_FILE"
   fi
 }
+
+# ── AWS Configuration ──────────────────────────────────────────
+# Validates AWS CLI installation and active credentials
+validate_aws_cli() {
+  echo "[ Step 1 ] Validating AWS CLI..."
+
+  command -v aws &>/dev/null \
+    || fail "AWS CLI not installed. Visit: https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html"
+
+  local account_id
+  account_id=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null) \
+    || fail "AWS CLI not configured. Run: aws configure"
+
+  ok "AWS CLI OK. Account: $account_id | Region: $AWS_REGION"
+  divider
+}

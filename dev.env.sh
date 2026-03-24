@@ -5,35 +5,42 @@
 # Lines beginning with # are comments and are ignored.
 # =============================================================
 
-# ── GitHub ─────────────────────────────────────────────────
-# Your GitHub repository in ORG/REPO format.
-GITHUB_ORG_REPO=VishnuPriyan-Meyi/learning-backend-repository
+# ── GitHub Config Object ───────────────────────────────────────
+declare -A GITHUB=(
+  [ORG]="VishnuPriyan-Meyi"
+  [REPO]="learning-backend-repository"
+  [BRANCH]="feat/sam-backend-pipeline-stack"
+  [CONNECTION_ARN]="arn:aws:codeconnections:ap-south-1:369606757523:connection/08feb4da-3348-4e18-9a1f-22a144db6021"
+)
 
-# Branch to watch and trigger the pipeline on.
-GITHUB_BRANCH=feat/sam-backend-pipeline-stack
+# ── AWS Config Object ──────────────────────────────────────────
+declare -A AWS=(
+  [REGION]="us-east-1"
+)
 
-# ARN of a manually created CodeStar GitHub connection.
-# Create in AWS Console:
-#   CodePipeline > Settings > Connections > Create connection > GitHub
-# Then paste the full ARN here (arn:aws:codestar-connections:...).
-GITHUB_CONNECTION_ARN=arn:aws:codeconnections:ap-south-1:369606757523:connection/08feb4da-3348-4e18-9a1f-22a144db6021
+# ── Stack Config Object ────────────────────────────────────────
+declare -A STACK=(
+  [LAMBDA_NAME]="learning-backend-function"
+  [INFRA_NAME]="learning-backend-infra"
+  [PIPELINE_NAME]="learning-backend-pipeline"
+)
 
+# =============================================================
+# EXPORTS (Translates object properties back into flat strings 
+# so AWS CodePipeline and setup.sh can officially read them)
+# =============================================================
+GITHUB_ORG_REPO="${GITHUB[ORG]}/${GITHUB[REPO]}"
+GITHUB_BRANCH="${GITHUB[BRANCH]}"
+GITHUB_CONNECTION_ARN="${GITHUB[CONNECTION_ARN]}"
 
-# ── AWS ─────────────────────────────────────────────────────
-# AWS region to deploy everything into.
-AWS_REGION=us-east-1
+AWS_REGION="${AWS[REGION]}"
 
-# ── Lambda ───────────────────────────────────────────────────
-# Name for the Lambda function.
-LAMBDA_FUNCTION_NAME=learning-backend-function
-
-# ── CloudFormation Stacks ─────────────────────────────────────
-# Names for the two CloudFormation stacks this project creates.
-INFRA_STACK_NAME=learning-backend-infra
-PIPELINE_STACK_NAME=learning-backend-pipeline
+LAMBDA_FUNCTION_NAME="${STACK[LAMBDA_NAME]}"
+INFRA_STACK_NAME="${STACK[INFRA_NAME]}"
+PIPELINE_STACK_NAME="${STACK[PIPELINE_NAME]}"
 
 # ── Auto-filled by setup.sh — DO NOT EDIT MANUALLY ───────────
 # These are populated automatically after setup.sh runs.
-ARTIFACTS_BUCKET=learning-backend-pipeline-artifactsbucket-gqebzwlzhlxf
+ARTIFACTS_BUCKET=learning-backend-pipeline-artifactsbucket-sibtvaonniqp
 LAMBDA_NAME=learning-backend-function
-API_ENDPOINT=https://dm7ufgxcc9.execute-api.us-east-1.amazonaws.com
+API_ENDPOINT=https://2d257ibbo1.execute-api.us-east-1.amazonaws.com
