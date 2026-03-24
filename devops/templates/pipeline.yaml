@@ -35,17 +35,6 @@ Parameters:
 # ── Resources ─────────────────────────────────────────────────
 Resources:
 
-  # ── Use Existing Shared Artifacts Bucket ─────────────────────
-  # Reference to existing shared bucket - don't create new one
-  # CloudFormation will validate access but won't try to create
-  ArtifactsBucket:
-    Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
-    Properties:
-      BucketName: !Ref ArtifactsBucketName
-    Metadata:
-      Comment: "Existing shared bucket - pipeline validates access only"
-
   # ── IAM Role: CodePipeline ────────────────────────────────────
   # Allows CodePipeline to read/write S3, trigger CodeBuild, and use
   # the GitHub connection.
@@ -75,8 +64,8 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:DeleteObject
                 Resource: 
-                  - !GetAtt ArtifactsBucket.Arn
-                  - !Sub "${ArtifactsBucket.Arn}/*"
+                  - !Sub "arn:aws:s3:::${ArtifactsBucketName}"
+                  - !Sub "arn:aws:s3:::${ArtifactsBucketName}/*"
               # CodeBuild — start builds and check status
               - Effect: Allow
                 Action:
@@ -134,8 +123,8 @@ Resources:
                   - s3:GetBucketLocation
                   - s3:CreateBucket
                 Resource: 
-                  - !GetAtt ArtifactsBucket.Arn
-                  - !Sub "${ArtifactsBucket.Arn}/*"
+                  - !Sub "arn:aws:s3:::${ArtifactsBucketName}"
+                  - !Sub "arn:aws:s3:::${ArtifactsBucketName}/*"
                   - !Sub "arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*"
                   - !Sub "arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*/*"
               # Lambda + CloudFormation — update SAM stack and resources
@@ -195,7 +184,7 @@ Resources:
         ImagePullCredentialsType: CODEBUILD
         EnvironmentVariables:
           - Name: ARTIFACTS_BUCKET
-            Value: !Ref ArtifactsBucket
+            Value: !Ref ArtifactsBucketName
             Type: PLAINTEXT
           - Name: ARTIFACT_BUCKET_PREFIX
             Value: backend/
@@ -238,7 +227,7 @@ Resources:
 
       ArtifactStore:
         Type: S3
-        Location: !Ref ArtifactsBucket
+        Location: !Ref ArtifactsBucketName
         EncryptionKey:
           Id: aws/s3
           Type: KMS
