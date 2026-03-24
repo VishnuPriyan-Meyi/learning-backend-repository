@@ -303,4 +303,4 @@ Outputs:
 
   ArtifactsBucketName:
     Description: S3 bucket used for pipeline artifacts (also stores Lambda ZIPs)
-    Value: !Ref ArtifactsBucket
+    Value: !Ref ArtifactsBucketName
