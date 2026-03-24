@@ -19,11 +19,7 @@ Parameters:
     Default: main
     Description: Branch to watch and trigger the pipeline on
 
-  LambdaFunctionName:
-    Type: String
-    Description: >
-      Name of the Lambda function to deploy to.
-      Must match the function created by backend_template.yaml.
+
 
   InfraStackName:
     Type: String
