@@ -81,7 +81,7 @@ Resources:
                   - codebuild:BatchGetProjects
                 Resource: 
                   - !GetAtt BackendBuildProject.Arn
-                  - !GetAtt BackendDeployProject.Arn
+                  - !GetAtt LambdaDeployProject.Arn
               # GitHub connection — pull source code
               - Effect: Allow
                 Action:
