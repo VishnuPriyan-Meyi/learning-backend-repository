@@ -1,6 +1,6 @@
 // ── Lambda Handler ────────────────────────────────────────────
 export const handler = (event) => {
-console.log("[event] - ",event)
+console.log("[event object] - ",event)
   // Health check
   return {
     statusCode: 200,
