@@ -66,8 +66,13 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:DeleteObject
                 Resource: 
-                  - Fn::ImportValue: !Sub "${BootstrapStackName}-SharedArtifactBucketArn"
-                  - !Sub "${Fn::ImportValue: ${BootstrapStackName}-SharedArtifactBucketArn}/*"
+                  - Fn::ImportValue:
+                      !Sub "${BootstrapStackName}-SharedArtifactBucketArn"
+                  - Fn::Sub:
+                      - "${BucketArn}/*"
+                      - BucketArn:
+                          Fn::ImportValue:
+                            !Sub "${BootstrapStackName}-SharedArtifactBucketArn"
               # CodeBuild — start builds and check status
               - Effect: Allow
                 Action:
@@ -125,8 +130,13 @@ Resources:
                   - s3:GetBucketLocation
                   - s3:CreateBucket
                 Resource: 
-                  - Fn::ImportValue: !Sub "${BootstrapStackName}-SharedArtifactBucketArn"
-                  - !Sub "${Fn::ImportValue: ${BootstrapStackName}-SharedArtifactBucketArn}/*"
+                  - Fn::ImportValue:
+                      !Sub "${BootstrapStackName}-SharedArtifactBucketArn"
+                  - Fn::Sub:
+                      - "${BucketArn}/*"
+                      - BucketArn:
+                          Fn::ImportValue:
+                            !Sub "${BootstrapStackName}-SharedArtifactBucketArn"
                   - !Sub "arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*"
                   - !Sub "arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*/*"
               # Lambda + CloudFormation — update SAM stack and resources
