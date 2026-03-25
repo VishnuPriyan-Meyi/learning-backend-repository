@@ -9,7 +9,7 @@
 declare -A GITHUB=(
   [ORG]="VishnuPriyan-Meyi"
   [REPO]="learning-backend-repository"
-  [BRANCH]="feat/bootstrap-backend-pipeline"
+  [BRANCH]="feat/bootstrap-bakend-pipeline"
   [CONNECTION_ARN]="arn:aws:codeconnections:ap-south-1:369606757523:connection/08feb4da-3348-4e18-9a1f-22a144db6021"
 )
 
