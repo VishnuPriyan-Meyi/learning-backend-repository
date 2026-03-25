@@ -57,10 +57,10 @@ Outputs:
     Description: Shared artifact bucket name
     Value: !Ref ArtifactBucket
     Export:
-      Name: SharedArtifactBucketName
+      Name: !Sub "${AWS::StackName}-SharedArtifactBucketName"
 
   ArtifactBucketArn:
     Description: Shared artifact bucket ARN
     Value: !GetAtt ArtifactBucket.Arn
     Export:
-      Name: SharedArtifactBucketArn
+      Name: !Sub "${AWS::StackName}-SharedArtifactBucketArn"
