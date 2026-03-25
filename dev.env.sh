@@ -26,8 +26,8 @@ declare -A STACK=(
 
 # ── Bootstrap Config Object ────────────────────────────────────
 declare -A BOOTSTRAP=(
-  [STACK_NAME]="${ENVIRONMENT[ENV]}-shared-artifact-bootstrap"
-  [BUCKET_NAME]="${ENVIRONMENT[ENV]}-shared-artifact-bucket"
+  [STACK_NAME]="shared-${ENVIRONMENT[ENV]}-artifact-bootstrap"
+  [BUCKET_NAME]="shared-${ENVIRONMENT[ENV]}-artifact-bucket"
 )
 
 # ── Additional Config ───────────────────────────────────────────
