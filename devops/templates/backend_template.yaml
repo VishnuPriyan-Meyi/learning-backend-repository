@@ -6,10 +6,6 @@ Description: >
 
 Parameters:
 
-  LambdaFunctionName:
-    Type: String
-    Description: Name for the Lambda function (e.g. learning-backend-function)
-
   ApiStageName:
     Type: String
     Default: Prod
@@ -54,7 +50,7 @@ Resources:
   BackendLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Ref LambdaFunctionName
+      FunctionName: !Sub "${AWS::StackName}-backend-function"
       Description: Learning Backend — Node.js Lambda API
       Runtime: nodejs20.x
       Handler: index.handler

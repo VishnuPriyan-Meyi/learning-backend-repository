@@ -39,23 +39,6 @@ validate_required_vars() {
   done
 }
 
-# ── Environment Variables ──────────────────────────────────────
-# Safely updates a single key in the global ENV_FILE
-update_env_var() {
-  local KEY="$1"
-  local VALUE="$2"
-  
-  if [ -z "$ENV_FILE" ]; then
-    fail "update_env_var requires ENV_FILE to be exported globally."
-  fi
-
-  if grep -q "^${KEY}=" "$ENV_FILE" 2>/dev/null || grep -q "^export ${KEY}=" "$ENV_FILE" 2>/dev/null; then
-    sed -i "s|^${KEY}=.*|${KEY}=${VALUE}|g; s|^export ${KEY}=.*|export ${KEY}=${VALUE}|g" "$ENV_FILE"
-  else
-    echo "export ${KEY}=${VALUE}" >> "$ENV_FILE"
-  fi
-}
-
 # ── AWS Configuration ──────────────────────────────────────────
 # Validates AWS CLI installation and active credentials
 validate_aws_cli() {

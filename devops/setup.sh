@@ -42,7 +42,7 @@ fi
 source <(sed -e 's/\r$//' devops/utils.sh)
 
 # Validate required config vars are filled in
-REQUIRED_VARS=(GITHUB AWS STACK SHARED_ARTIFACT_BUCKET_NAME)
+REQUIRED_VARS=(GITHUB AWS ENVIRONMENT STACK BOOTSTRAP)
 
 validate_required_vars "${REQUIRED_VARS[@]}"
 
@@ -80,10 +80,6 @@ ARTIFACTS_BUCKET=$(aws cloudformation describe-stacks \
   --output text)
 
 ok "Artifacts Bucket: $ARTIFACTS_BUCKET"
-
-info "Updating .env with auto-filled values..."
-update_env_var "ARTIFACTS_BUCKET" "$ARTIFACTS_BUCKET"
-ok ".env updated."
 divider
 
 echo "[ Step 4 ] Deploying infrastructure stack: ${STACK[INFRA_NAME]}"
@@ -101,7 +97,6 @@ sam deploy \
   --template-file "$SAM_BUILT_TEMPLATE" \
   --stack-name "${STACK[INFRA_NAME]}" \
   --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-  --parameter-overrides LambdaFunctionName="${STACK[LAMBDA_NAME]}" \
   --no-fail-on-empty-changeset \
   --region "${AWS[REGION]}"
 
@@ -110,25 +105,13 @@ divider
 
 echo "[ Step 5 ] Fetching infrastructure stack outputs..."
 
-LAMBDA_NAME=$(aws cloudformation describe-stacks \
-  --stack-name "${STACK[INFRA_NAME]}" \
-  --region "${AWS[REGION]}" \
-  --query "Stacks[0].Outputs[?OutputKey=='LambdaFunctionName'].OutputValue" \
-  --output text)
-
 API_ENDPOINT=$(aws cloudformation describe-stacks \
   --stack-name "${STACK[INFRA_NAME]}" \
   --region "${AWS[REGION]}" \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text)
 
-ok "Lambda Function: $LAMBDA_NAME"
 ok "API Endpoint:    $API_ENDPOINT"
-
-info "Updating .env with auto-filled values..."
-update_env_var "LAMBDA_NAME"   "$LAMBDA_NAME"
-update_env_var "API_ENDPOINT"  "$API_ENDPOINT"
-ok ".env updated."
 divider
 
 # ── Done ─────────────────────────────────────────────────────
@@ -137,7 +120,6 @@ echo -e "${GREEN}  ╔═══════════════════�
 echo -e "${GREEN}  ║         Setup Complete! 🎉                 ║${NC}"
 echo -e "${GREEN}  ╚════════════════════════════════════════════╝${NC}"
 echo ""
-echo "  Lambda Function: $LAMBDA_NAME"
 echo "  API Endpoint:    $API_ENDPOINT"
 echo "  Pipeline Stack:  ${STACK[PIPELINE_NAME]}"
 echo ""
