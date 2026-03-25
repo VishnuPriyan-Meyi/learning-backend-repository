@@ -34,7 +34,7 @@ Resources:
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub '${LambdaFunctionName}-execution-role'
+      RoleName: !Sub '${BackendLambdaFunction}-execution-role'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
